@@ -13,3 +13,15 @@ pub mod components;
 
 pub use auth_store::*;
 pub use components::*;
+
+use wasm_bindgen::prelude::*;
+
+/// WASM entry point - mounts the Leptos app
+#[wasm_bindgen(start)]
+pub fn main() {
+    // Better panic messages in the console
+    console_error_panic_hook::set_once();
+
+    // Mount the app to the DOM
+    leptos::mount::mount_to_body(components::App);
+}
