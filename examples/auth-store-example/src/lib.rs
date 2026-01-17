@@ -7,6 +7,7 @@
 //! - Async actions for login/logout
 //! - Context-based store sharing
 //! - Reactive UI updates
+//! - SSR (Server-Side Rendering) support
 
 pub mod auth_store;
 pub mod components;
@@ -14,14 +15,18 @@ pub mod components;
 pub use auth_store::*;
 pub use components::*;
 
-use wasm_bindgen::prelude::*;
-
-/// WASM entry point - mounts the Leptos app
-#[wasm_bindgen(start)]
-pub fn main() {
-    // Better panic messages in the console
+/// Hydration entry point - called on the client to hydrate the SSR HTML
+#[cfg(feature = "hydrate")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn hydrate() {
     console_error_panic_hook::set_once();
+    leptos::mount::hydrate_body(components::App);
+}
 
-    // Mount the app to the DOM
+/// CSR entry point - mounts the app directly (no SSR)
+#[cfg(feature = "csr")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn main() {
+    console_error_panic_hook::set_once();
     leptos::mount::mount_to_body(components::App);
 }
