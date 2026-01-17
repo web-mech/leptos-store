@@ -539,77 +539,76 @@ Follow [Semantic Versioning](https://semver.org/):
 
 ### Core Abstractions
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Component                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  use_store::<MyStore>()                             │    │
-│  │     │                                               │    │
-│  │     ▼                                               │    │
-│  │  ┌──────────────────────────────────────────────┐  │    │
-│  │  │                   Store                       │  │    │
-│  │  │  ┌────────────┐  ┌────────────┐             │  │    │
-│  │  │  │   State    │  │  Getters   │ (read-only) │  │    │
-│  │  │  │ RwSignal<T>│  │ derived    │             │  │    │
-│  │  │  └────────────┘  └────────────┘             │  │    │
-│  │  │         │                                    │  │    │
-│  │  │         ▼                                    │  │    │
-│  │  │  ┌────────────┐  ┌────────────┐             │  │    │
-│  │  │  │  Mutators  │  │  Actions   │             │  │    │
-│  │  │  │ state.update│  │ side effects│            │  │    │
-│  │  │  └────────────┘  └────────────┘             │  │    │
-│  │  └──────────────────────────────────────────────┘  │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Component["Component"]
+        useStore["use_store::&lt;MyStore&gt;()"]
+        subgraph Store["Store"]
+            direction TB
+            subgraph ReadLayer["Read Layer"]
+                State["State<br/><i>RwSignal&lt;T&gt;</i>"]
+                Getters["Getters<br/><i>derived, read-only</i>"]
+            end
+            subgraph WriteLayer["Write Layer"]
+                Mutators["Mutators<br/><i>state.update</i>"]
+                Actions["Actions<br/><i>side effects</i>"]
+            end
+        end
+    end
+    
+    useStore --> Store
+    State --> Mutators
+    Getters -.->|reads| State
 ```
 
 ### Data Flow
 
-```
-User Event
-    │
-    ▼
-Component Handler
-    │
-    ▼
-Store Action (optional side effects)
-    │
-    ▼
-Store Mutator (state.update)
-    │
-    ▼
-Signal Update (RwSignal)
-    │
-    ▼
-Reactive Update (automatic)
-    │
-    ▼
-Component Re-render
+```mermaid
+flowchart TD
+    A[User Event] --> B[Component Handler]
+    B --> C[Store Action]
+    C -->|optional side effects| D[Store Mutator]
+    D -->|state.update| E[Signal Update]
+    E -->|RwSignal| F[Reactive Update]
+    F -->|automatic| G[Component Re-render]
 ```
 
 ### Type Hierarchy
 
-```
-Store (trait)
-├── state() -> ReadSignal<State>
-├── id() -> StoreId
-└── name() -> &'static str
-
-StoreProvider<S: Store>
-├── new(store) -> Self
-├── get() -> S
-└── as_ref() -> &S
-
-Getter<State, Output> (trait)
-└── get(&self, state: &State) -> Output
-
-Mutator<State> (trait)
-└── mutate(&self, ctx: &mut MutatorContext<State>)
-
-AsyncAction<S: Store> (trait)
-├── Output (type)
-├── Error (type)
-└── execute(&self, store: &S) -> Future<ActionResult>
+```mermaid
+classDiagram
+    class Store {
+        <<trait>>
+        +state() ReadSignal~State~
+        +id() StoreId
+        +name() &'static str
+    }
+    
+    class StoreProvider~S: Store~ {
+        +new(store) Self
+        +get() S
+        +as_ref() &S
+    }
+    
+    class Getter~State, Output~ {
+        <<trait>>
+        +get(&self, state: &State) Output
+    }
+    
+    class Mutator~State~ {
+        <<trait>>
+        +mutate(&self, ctx: &mut MutatorContext~State~)
+    }
+    
+    class AsyncAction~S: Store~ {
+        <<trait>>
+        +Output type
+        +Error type
+        +execute(&self, store: &S) Future~ActionResult~
+    }
+    
+    StoreProvider ..> Store : requires
+    AsyncAction ..> Store : requires
 ```
 
 ---
