@@ -1,0 +1,30 @@
+[package]
+name = "leptos-store"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "Enterprise-grade, type-enforced state management for Leptos"
+repository = "https://github.com/your-org/leptos-store"
+keywords = ["leptos", "state-management", "reactive", "wasm", "ssr"]
+categories = ["web-programming", "wasm"]
+readme = "README.md"
+
+[features]
+default = ["ssr"]
+ssr = []
+hydrate = []
+csr = []
+
+[dependencies]
+leptos = { version = "0.8", default-features = false }
+thiserror = "2.0"
+futures = "0.3"
+pin-project-lite = "0.2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+wasm-bindgen-test = "0.3"
+
+[workspace]
+members = [".", "examples/auth-store-example"]
