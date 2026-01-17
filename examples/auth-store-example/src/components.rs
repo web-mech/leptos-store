@@ -1,0 +1,261 @@
+//! UI Components for the Auth Store Example
+//!
+//! This module provides Leptos components that demonstrate
+//! how to use the AuthStore in a real application.
+
+use leptos::prelude::*;
+use leptos_store::prelude::*;
+
+use crate::auth_store::{AuthStore, LoginCredentials};
+
+/// Main application component.
+///
+/// Sets up the store provider and renders the appropriate
+/// view based on authentication state.
+#[component]
+pub fn App() -> impl IntoView {
+    // Create and provide the auth store
+    let store = AuthStore::new();
+    provide_store(store);
+
+    view! {
+        <div class="app">
+            <AuthRouter />
+        </div>
+    }
+}
+
+/// Router component that shows login or dashboard based on auth state.
+#[component]
+fn AuthRouter() -> impl IntoView {
+    let store = use_store::<AuthStore>();
+
+    view! {
+        <div class="auth-router">
+            {move || {
+                let store = store.clone();
+                if store.is_authenticated() {
+                    view! { <Dashboard /> }.into_any()
+                } else {
+                    view! { <LoginPage /> }.into_any()
+                }
+            }}
+        </div>
+    }
+}
+
+/// Login page component.
+#[component]
+fn LoginPage() -> impl IntoView {
+    let store = use_store::<AuthStore>();
+
+    // Local form state
+    let (email, set_email) = signal(String::new());
+    let (password, set_password) = signal(String::new());
+    let (remember_me, set_remember_me) = signal(false);
+
+    // Clone store for each closure
+    let store_submit = store.clone();
+    let store_error = store.clone();
+    let store_loading1 = store.clone();
+    let store_loading2 = store.clone();
+
+    // Form submission handler
+    let on_submit = move |ev: web_sys::SubmitEvent| {
+        ev.prevent_default();
+
+        let credentials = LoginCredentials {
+            email: email.get(),
+            password: password.get(),
+            remember_me: remember_me.get(),
+        };
+
+        store_submit.login(credentials);
+    };
+
+    view! {
+        <div class="login-page">
+            <div class="login-card">
+                <h1>"Welcome Back"</h1>
+                <p class="subtitle">"Sign in to your account"</p>
+
+                // Error display
+                {move || {
+                    let store = store_error.clone();
+                    store.error().map(|err| {
+                        view! {
+                            <div class="error-message">
+                                {err.to_string()}
+                            </div>
+                        }
+                    })
+                }}
+
+                <form on:submit=on_submit>
+                    <div class="form-group">
+                        <label for="email">"Email"</label>
+                        <input
+                            type="email"
+                            id="email"
+                            placeholder="you@example.com"
+                            prop:value=email
+                            on:input=move |ev| {
+                                set_email.set(event_target_value(&ev));
+                            }
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">"Password"</label>
+                        <input
+                            type="password"
+                            id="password"
+                            placeholder="••••••••"
+                            prop:value=password
+                            on:input=move |ev| {
+                                set_password.set(event_target_value(&ev));
+                            }
+                        />
+                    </div>
+
+                    <div class="form-group checkbox">
+                        <input
+                            type="checkbox"
+                            id="remember"
+                            prop:checked=remember_me
+                            on:change=move |ev| {
+                                set_remember_me.set(event_target_checked(&ev));
+                            }
+                        />
+                        <label for="remember">"Remember me"</label>
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="btn-primary"
+                        disabled=move || store_loading1.is_loading()
+                    >
+                        {move || if store_loading2.is_loading() { "Signing in..." } else { "Sign In" }}
+                    </button>
+                </form>
+
+                <p class="demo-hint">
+                    "Demo: Enter any email and password to log in"
+                </p>
+            </div>
+        </div>
+    }
+}
+
+/// Dashboard component shown after login.
+#[component]
+fn Dashboard() -> impl IntoView {
+    let store = use_store::<AuthStore>();
+
+    // Clone store for each closure
+    let store_logout = store.clone();
+    let store_name = store.clone();
+    let store_email = store.clone();
+    let store_user = store.clone();
+    let store_status = store.clone();
+
+    let on_logout = move |_| {
+        store_logout.logout();
+    };
+
+    view! {
+        <div class="dashboard">
+            <header class="dashboard-header">
+                <h1>"Dashboard"</h1>
+                <div class="user-menu">
+                    <UserAvatar />
+                    <button class="btn-secondary" on:click=on_logout>
+                        "Sign Out"
+                    </button>
+                </div>
+            </header>
+
+            <main class="dashboard-content">
+                <div class="welcome-card">
+                    <h2>"Welcome, " {move || store_name.display_name()} "!"</h2>
+                    <p>"You are now logged in to your account."</p>
+                </div>
+
+                <div class="info-cards">
+                    <InfoCard
+                        title="Email"
+                        value=Signal::derive(move || store_email.user_email().unwrap_or_default())
+                    />
+                    <InfoCard
+                        title="User ID"
+                        value=Signal::derive(move || store_user.current_user().map(|u| u.id).unwrap_or_default())
+                    />
+                    <InfoCard
+                        title="Status"
+                        value=Signal::derive(move || if store_status.is_authenticated() { "Authenticated".to_string() } else { "Not authenticated".to_string() })
+                    />
+                </div>
+            </main>
+        </div>
+    }
+}
+
+/// User avatar component.
+#[component]
+fn UserAvatar() -> impl IntoView {
+    let store = use_store::<AuthStore>();
+
+    let store_user = store.clone();
+    let store_initials = store.clone();
+
+    view! {
+        <div class="avatar">
+            {move || {
+                let user = store_user.current_user();
+                if let Some(url) = user.as_ref().and_then(|u| u.avatar_url.clone()) {
+                    view! {
+                        <img src=url alt="User avatar" />
+                    }.into_any()
+                } else {
+                    let initials = store_initials.user_initials();
+                    view! {
+                        <span class="avatar-initials">
+                            {initials}
+                        </span>
+                    }.into_any()
+                }
+            }}
+        </div>
+    }
+}
+
+/// Info card component for displaying user information.
+#[component]
+fn InfoCard(
+    title: &'static str,
+    value: Signal<String>,
+) -> impl IntoView {
+    view! {
+        <div class="info-card">
+            <h3>{title}</h3>
+            <p>{value}</p>
+        </div>
+    }
+}
+
+// Helper functions for event handling
+fn event_target_value(ev: &web_sys::Event) -> String {
+    use wasm_bindgen::JsCast;
+    ev.target()
+        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|input| input.value())
+        .unwrap_or_default()
+}
+
+fn event_target_checked(ev: &web_sys::Event) -> bool {
+    use wasm_bindgen::JsCast;
+    ev.target()
+        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|input| input.checked())
+        .unwrap_or_default()
+}
