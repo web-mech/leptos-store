@@ -2,26 +2,43 @@
 //!
 //! This module provides Leptos components that demonstrate
 //! how to use the AuthStore in a real application.
+//!
+//! Supports SSR (Server-Side Rendering), hydration, and CSR modes.
 
 use leptos::prelude::*;
+use leptos_meta::{provide_meta_context, Meta, Stylesheet, Title};
+use leptos_router::{
+    components::{Route, Router, Routes},
+    path,
+};
 use leptos_store::prelude::*;
 
 use crate::auth_store::{AuthStore, LoginCredentials};
 
-/// Main application component.
+/// Shell component that wraps the entire application.
 ///
-/// Sets up the store provider and renders the appropriate
-/// view based on authentication state.
+/// Provides meta context and routing for SSR support.
 #[component]
 pub fn App() -> impl IntoView {
+    // Provides context for <Title> and <Meta> components
+    provide_meta_context();
+
     // Create and provide the auth store
     let store = AuthStore::new();
     provide_store(store);
 
     view! {
-        <div class="app">
-            <AuthRouter />
-        </div>
+        <Stylesheet id="leptos" href="/pkg/auth-store-example.css"/>
+        <Title text="Auth Store Example"/>
+        <Meta name="description" content="SSR Example for leptos-store"/>
+
+        <Router>
+            <main class="app">
+                <Routes fallback=|| "Page not found">
+                    <Route path=path!("/") view=AuthRouter/>
+                </Routes>
+            </main>
+        </Router>
     }
 }
 
@@ -61,7 +78,7 @@ fn LoginPage() -> impl IntoView {
     let store_loading2 = store.clone();
 
     // Form submission handler
-    let on_submit = move |ev: web_sys::SubmitEvent| {
+    let on_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
 
         let credentials = LoginCredentials {
@@ -97,10 +114,11 @@ fn LoginPage() -> impl IntoView {
                         <input
                             type="email"
                             id="email"
+                            name="email"
                             placeholder="you@example.com"
                             prop:value=email
-                            on:input=move |ev| {
-                                set_email.set(event_target_value(&ev));
+                            on:input:target=move |ev| {
+                                set_email.set(ev.target().value());
                             }
                         />
                     </div>
@@ -110,10 +128,11 @@ fn LoginPage() -> impl IntoView {
                         <input
                             type="password"
                             id="password"
+                            name="password"
                             placeholder="••••••••"
                             prop:value=password
-                            on:input=move |ev| {
-                                set_password.set(event_target_value(&ev));
+                            on:input:target=move |ev| {
+                                set_password.set(ev.target().value());
                             }
                         />
                     </div>
@@ -122,9 +141,10 @@ fn LoginPage() -> impl IntoView {
                         <input
                             type="checkbox"
                             id="remember"
+                            name="remember"
                             prop:checked=remember_me
-                            on:change=move |ev| {
-                                set_remember_me.set(event_target_checked(&ev));
+                            on:change:target=move |ev| {
+                                set_remember_me.set(ev.target().checked());
                             }
                         />
                         <label for="remember">"Remember me"</label>
@@ -241,21 +261,4 @@ fn InfoCard(
             <p>{value}</p>
         </div>
     }
-}
-
-// Helper functions for event handling
-fn event_target_value(ev: &web_sys::Event) -> String {
-    use wasm_bindgen::JsCast;
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-        .map(|input| input.value())
-        .unwrap_or_default()
-}
-
-fn event_target_checked(ev: &web_sys::Event) -> bool {
-    use wasm_bindgen::JsCast;
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-        .map(|input| input.checked())
-        .unwrap_or_default()
 }
