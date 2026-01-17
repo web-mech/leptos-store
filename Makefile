@@ -136,6 +136,11 @@ doc-private:
 # Example Application
 # ============================================================================
 
+## Install cargo-leptos if not present
+leptos-install:
+	@echo "$(CYAN)Installing cargo-leptos...$(RESET)"
+	@command -v cargo-leptos >/dev/null 2>&1 || cargo install cargo-leptos
+
 ## Install trunk (WASM bundler) if not present
 trunk-install:
 	@echo "$(CYAN)Installing trunk...$(RESET)"
@@ -147,34 +152,59 @@ wasm-target:
 	rustup target add wasm32-unknown-unknown
 
 ## Setup example dependencies
-example-setup: trunk-install wasm-target
+example-setup: wasm-target
 	@echo "$(GREEN)Example setup complete!$(RESET)"
 
-## Run the example in development mode (with hot-reload)
-example: example-setup
-	@echo "$(CYAN)Starting auth-store-example...$(RESET)"
+## Run the example in SSR mode (recommended)
+example: example-setup leptos-install
+	@echo "$(CYAN)Starting auth-store-example (SSR mode)...$(RESET)"
+	@echo "$(YELLOW)Open http://127.0.0.1:3000 in your browser$(RESET)"
+	cd examples/auth-store-example && cargo leptos watch
+
+## Run the example in SSR mode (manual - without cargo-leptos)
+example-ssr: example-setup
+	@echo "$(CYAN)Building WASM for hydration...$(RESET)"
+	cd examples/auth-store-example && cargo build --lib --features hydrate --target wasm32-unknown-unknown
+	@echo "$(CYAN)Starting server...$(RESET)"
+	@echo "$(YELLOW)Open http://127.0.0.1:3000 in your browser$(RESET)"
+	cd examples/auth-store-example && cargo run --features ssr
+
+## Run the example in CSR mode (with trunk)
+example-csr: example-setup trunk-install
+	@echo "$(CYAN)Starting auth-store-example (CSR mode)...$(RESET)"
 	@echo "$(YELLOW)Open http://localhost:8080 in your browser$(RESET)"
-	cd examples/auth-store-example && trunk serve
+	cd examples/auth-store-example && trunk serve --features csr
 
-## Run the example on a specific port
-example-port: example-setup
+## Run the example on a specific port (CSR mode)
+example-port: example-setup trunk-install
 	@echo "$(CYAN)Starting auth-store-example on port $(PORT)...$(RESET)"
-	cd examples/auth-store-example && trunk serve --port $(PORT)
+	cd examples/auth-store-example && trunk serve --features csr --port $(PORT)
 
-## Build the example for production
-example-build: example-setup
-	@echo "$(CYAN)Building auth-store-example...$(RESET)"
-	cd examples/auth-store-example && trunk build
+## Build the example for production (SSR)
+example-build: example-setup leptos-install
+	@echo "$(CYAN)Building auth-store-example (SSR)...$(RESET)"
+	cd examples/auth-store-example && cargo leptos build
 
-## Build the example for production (optimized)
-example-release: example-setup
-	@echo "$(CYAN)Building auth-store-example (release)...$(RESET)"
-	cd examples/auth-store-example && trunk build --release
+## Build the example for production (SSR, optimized)
+example-release: example-setup leptos-install
+	@echo "$(CYAN)Building auth-store-example (SSR, release)...$(RESET)"
+	cd examples/auth-store-example && cargo leptos build --release
+
+## Build the example for CSR
+example-build-csr: example-setup trunk-install
+	@echo "$(CYAN)Building auth-store-example (CSR)...$(RESET)"
+	cd examples/auth-store-example && trunk build --features csr
+
+## Build the example for CSR (optimized)
+example-release-csr: example-setup trunk-install
+	@echo "$(CYAN)Building auth-store-example (CSR, release)...$(RESET)"
+	cd examples/auth-store-example && trunk build --release --features csr
 
 ## Clean example build artifacts
 example-clean:
 	@echo "$(CYAN)Cleaning example build artifacts...$(RESET)"
 	rm -rf examples/auth-store-example/dist
+	rm -rf examples/auth-store-example/target/site
 
 # ============================================================================
 # Publishing
@@ -339,11 +369,17 @@ help:
 	@echo "  doc-open       Build and open documentation"
 	@echo "  doc-private    Build docs with private items"
 	@echo ""
-	@echo "$(GREEN)Example:$(RESET)"
-	@echo "  example        Run the auth example (dev mode)"
-	@echo "  example-build  Build the example"
-	@echo "  example-release Build the example (optimized)"
-	@echo "  example-clean  Clean example artifacts"
+	@echo "$(GREEN)Example (SSR mode - recommended):$(RESET)"
+	@echo "  example          Run the example (SSR with cargo-leptos)"
+	@echo "  example-ssr      Run the example (SSR manual)"
+	@echo "  example-build    Build the example (SSR)"
+	@echo "  example-release  Build the example (SSR, optimized)"
+	@echo ""
+	@echo "$(GREEN)Example (CSR mode):$(RESET)"
+	@echo "  example-csr        Run the example (CSR with trunk)"
+	@echo "  example-build-csr  Build the example (CSR)"
+	@echo "  example-release-csr Build the example (CSR, optimized)"
+	@echo "  example-clean      Clean example artifacts"
 	@echo ""
 	@echo "$(GREEN)Publishing:$(RESET)"
 	@echo "  publish-dry    Dry run publish"
