@@ -74,7 +74,8 @@ site-addr = "127.0.0.1:3000"
 style-file = "style/main.css"
 
 # Enables additional file hashes on outputted files
-hash-files = true
+# Disabled for manual SSR mode (use cargo-leptos for hashing)
+hash-files = false
 
 # Library profile for WASM builds
 lib-profile-release = "release"
