@@ -9,7 +9,7 @@ async fn main() -> std::io::Result<()> {
     use actix_files::Files;
     use actix_web::*;
     use leptos::prelude::*;
-    use leptos_actix::{generate_route_list, LeptosRoutes};
+    use leptos_actix::{LeptosRoutes, generate_route_list};
     use token_explorer_example::{components::App, token_store::*};
 
     // Set defaults for manual mode
@@ -43,10 +43,10 @@ async fn main() -> std::io::Result<()> {
                 move || {
                     // Note: We use a resource to fetch tokens per-request
                     // The actual fetching happens in the App component via create_resource
-                    
+
                     // Create an empty store - it will be populated by the resource
                     let store = TokenStore::new();
-                    
+
                     // Serialize empty store state for hydration
                     // The client will immediately fetch fresh data
                     let hydration_data = {

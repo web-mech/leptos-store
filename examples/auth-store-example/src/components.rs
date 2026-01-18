@@ -15,7 +15,7 @@
 //! ensuring no hydration mismatches.
 
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, Meta, Stylesheet, Title};
+use leptos_meta::{Meta, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     components::{Route, Router, Routes},
     path,
@@ -282,10 +282,7 @@ fn UserAvatar() -> impl IntoView {
 
 /// Info card component for displaying user information.
 #[component]
-fn InfoCard(
-    title: &'static str,
-    value: Signal<String>,
-) -> impl IntoView {
+fn InfoCard(title: &'static str, value: Signal<String>) -> impl IntoView {
     view! {
         <div class="info-card">
             <h3>{title}</h3>

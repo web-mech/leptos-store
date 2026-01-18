@@ -28,7 +28,7 @@ pub use crate::store::{
 };
 
 // Context management
-pub use crate::context::{provide_store, use_store, StoreProvider};
+pub use crate::context::{StoreProvider, provide_store, use_store};
 
 // Async actions
 pub use crate::r#async::{
@@ -38,18 +38,18 @@ pub use crate::r#async::{
 // Hydration support (when feature is enabled)
 #[cfg(feature = "hydrate")]
 pub use crate::hydration::{
+    HYDRATION_SCRIPT_PREFIX, HydratableStore, HydrationBuilder, StoreHydrationError,
     has_hydration_data, hydrate_store, hydration_script_html, hydration_script_id,
-    serialize_store_state, HydratableStore, HydrationBuilder, StoreHydrationError,
-    HYDRATION_SCRIPT_PREFIX,
+    serialize_store_state,
 };
 
 #[cfg(feature = "hydrate")]
 pub use crate::context::{
-    provide_hydrated_store, try_use_hydrated_store, use_hydrated_store, HydratableStoreContextExt,
+    HydratableStoreContextExt, provide_hydrated_store, try_use_hydrated_store, use_hydrated_store,
 };
 
 // Re-export commonly used Leptos types for convenience
-pub use leptos::prelude::{signal, RwSignal};
+pub use leptos::prelude::{RwSignal, signal};
 
 // Re-export serde when hydrate feature is enabled (for user convenience)
 #[cfg(feature = "hydrate")]

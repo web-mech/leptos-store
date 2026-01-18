@@ -293,8 +293,16 @@ impl TokenStore {
                     SortField::Liquidity => a.liquidity.partial_cmp(&b.liquidity),
                     SortField::Holders => a.holder_count.partial_cmp(&b.holder_count),
                     SortField::Volume24h => {
-                        let vol_a = a.stats_24h.as_ref().map(|s| s.buy_volume + s.sell_volume).unwrap_or(0.0);
-                        let vol_b = b.stats_24h.as_ref().map(|s| s.buy_volume + s.sell_volume).unwrap_or(0.0);
+                        let vol_a = a
+                            .stats_24h
+                            .as_ref()
+                            .map(|s| s.buy_volume + s.sell_volume)
+                            .unwrap_or(0.0);
+                        let vol_b = b
+                            .stats_24h
+                            .as_ref()
+                            .map(|s| s.buy_volume + s.sell_volume)
+                            .unwrap_or(0.0);
                         vol_a.partial_cmp(&vol_b)
                     }
                 };
@@ -330,19 +338,34 @@ impl TokenStore {
         self.state.with(|s| s.error.clone())
     }
 
-    /// Get search query
+    /// Get search query (reactive)
     pub fn search_query(&self) -> String {
         self.state.with(|s| s.search_query.clone())
     }
 
-    /// Get sort field
+    /// Get search query (non-reactive)
+    pub fn search_query_untracked(&self) -> String {
+        self.state.with_untracked(|s| s.search_query.clone())
+    }
+
+    /// Get sort field (reactive)
     pub fn sort_by(&self) -> SortField {
         self.state.with(|s| s.sort_by.clone())
     }
 
-    /// Check if sort is descending
+    /// Get sort field (non-reactive, for use outside tracking context)
+    pub fn sort_by_untracked(&self) -> SortField {
+        self.state.with_untracked(|s| s.sort_by.clone())
+    }
+
+    /// Check if sort is descending (reactive)
     pub fn is_sort_desc(&self) -> bool {
         self.state.with(|s| s.sort_desc)
+    }
+
+    /// Check if sort is descending (non-reactive)
+    pub fn is_sort_desc_untracked(&self) -> bool {
+        self.state.with_untracked(|s| s.sort_desc)
     }
 
     // ========================================================================
@@ -377,7 +400,7 @@ impl TokenStore {
         self.state.update(|s| s.search_query = query);
     }
 
-    /// Set sort field
+    /// Set sort field (toggles direction if same field)
     pub fn set_sort_by(&self, field: SortField) {
         self.state.update(|s| {
             if s.sort_by == field {
@@ -387,6 +410,14 @@ impl TokenStore {
                 s.sort_by = field;
                 s.sort_desc = true; // Default to descending for new field
             }
+        });
+    }
+
+    /// Set sort field and direction directly (for URL sync)
+    pub fn set_sort_field_direct(&self, field: SortField, desc: bool) {
+        self.state.update(|s| {
+            s.sort_by = field;
+            s.sort_desc = desc;
         });
     }
 
@@ -431,13 +462,10 @@ impl Store for TokenStore {
 
 #[cfg(feature = "hydrate")]
 impl leptos_store::hydration::HydratableStore for TokenStore {
-    fn serialize_state(
-        &self,
-    ) -> Result<String, leptos_store::hydration::StoreHydrationError> {
+    fn serialize_state(&self) -> Result<String, leptos_store::hydration::StoreHydrationError> {
         let state = self.state.get_untracked();
-        serde_json::to_string(&state).map_err(|e| {
-            leptos_store::hydration::StoreHydrationError::Serialization(e.to_string())
-        })
+        serde_json::to_string(&state)
+            .map_err(|e| leptos_store::hydration::StoreHydrationError::Serialization(e.to_string()))
     }
 
     fn from_hydrated_state(
@@ -485,7 +513,7 @@ pub fn build_api_url(token_ids: &[&str], limit: usize) -> String {
 #[cfg(feature = "ssr")]
 pub async fn fetch_tokens_server() -> Result<Vec<Token>, String> {
     let url = build_api_url(DEFAULT_TOKEN_IDS, 10);
-    
+
     let response = reqwest::get(&url)
         .await
         .map_err(|e| format!("Network error: {}", e))?;
@@ -519,7 +547,7 @@ pub async fn fetch_tokens() -> Result<FetchTokensResponse, leptos::prelude::Serv
     let tokens = fetch_tokens_server()
         .await
         .map_err(|e| leptos::prelude::ServerFnError::new(e))?;
-    
+
     Ok(FetchTokensResponse {
         tokens,
         fetched_at: current_timestamp(),
@@ -530,31 +558,30 @@ pub async fn fetch_tokens() -> Result<FetchTokensResponse, leptos::prelude::Serv
 #[cfg(feature = "ssr")]
 fn current_timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    
+
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     let secs = duration.as_secs();
-    
+
     // Simple UTC timestamp without full chrono dependency
     let days_since_epoch = secs / 86400;
     let time_of_day = secs % 86400;
     let hours = time_of_day / 3600;
     let minutes = (time_of_day % 3600) / 60;
     let seconds = time_of_day % 60;
-    
+
     // Approximate date calculation (good enough for display)
     let year = 1970 + (days_since_epoch / 365);
     let day_of_year = days_since_epoch % 365;
     let month = (day_of_year / 30) + 1;
     let day = (day_of_year % 30) + 1;
-    
+
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
         year, month, day, hours, minutes, seconds
     )
 }
-
 
 // ============================================================================
 // Tests
@@ -654,7 +681,7 @@ mod tests {
             search_query: "test query".to_string(),
             sort_by: SortField::PriceChange24h,
             sort_desc: true,
-            loading: true, // Should be skipped
+            loading: true,                    // Should be skipped
             error: Some("error".to_string()), // Should be skipped
             ..Default::default()
         };
@@ -683,16 +710,14 @@ mod tests {
 
         #[test]
         fn test_store_hydration_roundtrip() {
-            let store = TokenStore::with_tokens(vec![
-                Token {
-                    id: "hydrate_test".to_string(),
-                    name: "Hydration Test".to_string(),
-                    symbol: "HYD".to_string(),
-                    usd_price: 0.5,
-                    mcap: 500000.0,
-                    ..Default::default()
-                },
-            ]);
+            let store = TokenStore::with_tokens(vec![Token {
+                id: "hydrate_test".to_string(),
+                name: "Hydration Test".to_string(),
+                symbol: "HYD".to_string(),
+                usd_price: 0.5,
+                mcap: 500000.0,
+                ..Default::default()
+            }]);
 
             let serialized = store.serialize_state().unwrap();
             let restored = TokenStore::from_hydrated_state(&serialized).unwrap();

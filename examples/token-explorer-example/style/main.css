@@ -49,6 +49,11 @@
     box-sizing: border-box;
 }
 
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
 html, body {
     font-family: var(--font-sans);
     background: var(--bg-primary);
@@ -225,11 +230,12 @@ body::before {
 .search-box {
     flex: 1;
     min-width: 200px;
+    position: relative;
 }
 
 .search-box input {
     width: 100%;
-    padding: 12px 16px;
+    padding: 12px 40px 12px 16px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -246,6 +252,63 @@ body::before {
 .search-box input:focus {
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px rgba(153, 69, 255, 0.1);
+}
+
+.clear-search {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: var(--bg-card);
+    border-radius: 50%;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.clear-search:hover {
+    background: var(--negative);
+    color: white;
+}
+
+/* Active filter indicator */
+.controls.has-filters {
+    border-color: var(--accent-primary);
+}
+
+.filter-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.filter-summary .count {
+    color: var(--accent-secondary);
+    font-weight: 600;
+}
+
+.filter-summary .clear-all {
+    margin-left: auto;
+    color: var(--text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 12px;
+}
+
+.filter-summary .clear-all:hover {
+    color: var(--accent-primary);
 }
 
 .sort-buttons {

@@ -44,9 +44,7 @@ use leptos::prelude::*;
 use std::marker::PhantomData;
 
 #[cfg(feature = "hydrate")]
-use crate::hydration::{
-    has_hydration_data, hydrate_store, HydratableStore, StoreHydrationError,
-};
+use crate::hydration::{HydratableStore, StoreHydrationError, has_hydration_data, hydrate_store};
 
 /// Provide a store to the component tree via Leptos context.
 ///
@@ -419,8 +417,8 @@ pub fn use_hydrated_store<S: HydratableStore + Clone + Send + Sync + 'static>() 
 ///
 /// [`HydratableStore`]: crate::hydration::HydratableStore
 #[cfg(feature = "hydrate")]
-pub fn try_use_hydrated_store<S: HydratableStore + Clone + Send + Sync + 'static>(
-) -> Result<S, StoreHydrationError> {
+pub fn try_use_hydrated_store<S: HydratableStore + Clone + Send + Sync + 'static>()
+-> Result<S, StoreHydrationError> {
     // First, try to hydrate from DOM
     if has_hydration_data(S::store_key()) {
         match hydrate_store::<S>() {

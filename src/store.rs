@@ -415,11 +415,9 @@ impl StoreRegistry {
     /// Get a store from the registry.
     pub fn get<S: Store + Send + Sync>(&self) -> Option<Arc<S>> {
         let id = StoreId::new::<S>();
-        self.stores.get(&id).and_then(|s| {
-            s.clone()
-                .downcast::<S>()
-                .ok()
-        })
+        self.stores
+            .get(&id)
+            .and_then(|s| s.clone().downcast::<S>().ok())
     }
 
     /// Remove a store from the registry.

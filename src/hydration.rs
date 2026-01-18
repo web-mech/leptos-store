@@ -360,7 +360,10 @@ mod tests {
         assert_eq!(err.to_string(), "Deserialization error: parse error");
 
         let err = StoreHydrationError::NotFound("my_store".to_string());
-        assert_eq!(err.to_string(), "Hydration data not found for key: my_store");
+        assert_eq!(
+            err.to_string(),
+            "Hydration data not found for key: my_store"
+        );
 
         let err = StoreHydrationError::InvalidData("bad format".to_string());
         assert_eq!(err.to_string(), "Invalid hydration data: bad format");
@@ -478,7 +481,9 @@ mod tests {
             let store = TestHydratableStore::with_state(original_state.clone());
 
             // Serialize
-            let serialized = store.serialize_state().expect("Serialization should succeed");
+            let serialized = store
+                .serialize_state()
+                .expect("Serialization should succeed");
 
             // Verify JSON structure
             assert!(serialized.contains("42"));
@@ -498,7 +503,9 @@ mod tests {
         fn test_store_default_state_roundtrip() {
             let store = TestHydratableStore::new();
 
-            let serialized = store.serialize_state().expect("Serialization should succeed");
+            let serialized = store
+                .serialize_state()
+                .expect("Serialization should succeed");
             let restored = TestHydratableStore::from_hydrated_state(&serialized)
                 .expect("Deserialization should succeed");
 

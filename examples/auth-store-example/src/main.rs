@@ -9,7 +9,7 @@ async fn main() -> std::io::Result<()> {
     use actix_web::*;
     use auth_store_example::components::App;
     use leptos::prelude::*;
-    use leptos_actix::{generate_route_list, LeptosRoutes};
+    use leptos_actix::{LeptosRoutes, generate_route_list};
 
     // Set defaults for manual mode if env vars aren't set (cargo-leptos sets these)
     // SAFETY: We're single-threaded at this point before any async work starts

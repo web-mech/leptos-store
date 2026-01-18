@@ -8,16 +8,16 @@
 //! - Shareable URLs that preserve filter state
 
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, Meta, Stylesheet, Title};
+use leptos_meta::{Meta, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
+    NavigateOptions,
     components::{Route, Router, Routes},
     hooks::{use_navigate, use_query_map},
-    NavigateOptions,
     path,
 };
 use leptos_store::prelude::*;
 
-use crate::token_store::{fetch_tokens, SortField, Token, TokenStore};
+use crate::token_store::{SortField, Token, TokenStore, fetch_tokens};
 
 // ============================================================================
 // URL Query Parameter Handling
@@ -72,17 +72,29 @@ fn direction_to_param(desc: bool) -> &'static str {
 /// Build query string from current filter state
 fn build_query_string(search: &str, sort: &SortField, desc: bool) -> String {
     let mut params = Vec::new();
-    
+
     if !search.is_empty() {
-        params.push(format!("{}={}", query_keys::SEARCH, urlencoding::encode(search)));
+        params.push(format!(
+            "{}={}",
+            query_keys::SEARCH,
+            urlencoding::encode(search)
+        ));
     }
-    
+
     // Only include sort params if not default
     if *sort != SortField::MarketCap || !desc {
-        params.push(format!("{}={}", query_keys::SORT, sort_field_to_param(sort)));
-        params.push(format!("{}={}", query_keys::DIRECTION, direction_to_param(desc)));
+        params.push(format!(
+            "{}={}",
+            query_keys::SORT,
+            sort_field_to_param(sort)
+        ));
+        params.push(format!(
+            "{}={}",
+            query_keys::DIRECTION,
+            direction_to_param(desc)
+        ));
     }
-    
+
     if params.is_empty() {
         String::new()
     } else {
@@ -98,7 +110,7 @@ const POLL_INTERVAL_MS: u32 = 30_000;
 #[cfg(feature = "hydrate")]
 fn read_hydration_script(store_key: &str) -> Option<String> {
     use wasm_bindgen::JsCast;
-    
+
     let window = web_sys::window()?;
     let document = window.document()?;
     let script_id = format!("__leptos_store_{}", store_key);
@@ -129,7 +141,7 @@ pub fn App() -> impl IntoView {
     #[cfg(feature = "hydrate")]
     {
         use leptos_store::hydration::HydratableStore;
-        
+
         // Try to hydrate from serialized data, fallback to empty store
         let store = if let Some(data) = read_hydration_script("token_store") {
             TokenStore::from_hydrated_state(&data).unwrap_or_else(|_| TokenStore::new())
@@ -160,23 +172,51 @@ pub fn App() -> impl IntoView {
     }
 }
 
-/// Main token explorer page with SSR data fetching and client-side polling
+/// Main token explorer page with SSR data fetching, client-side polling,
+/// and URL-based search/filtering
 #[component]
 fn TokenExplorer() -> impl IntoView {
     let store = use_store::<TokenStore>();
-    
+    let navigate = use_navigate();
+    let query_map = use_query_map();
+
     // Signal to track last update time
     let (last_updated, set_last_updated) = signal(String::new());
     let (is_refreshing, set_is_refreshing) = signal(false);
-    
+
+    // Read initial filter state from URL query parameters (once, not reactive)
+    // This ensures SSR renders the correct filtered list
+    let params = query_map.get_untracked();
+    let initial_search = params
+        .get(query_keys::SEARCH)
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let initial_sort = params
+        .get(query_keys::SORT)
+        .map(|s| parse_sort_field(s.as_str()))
+        .unwrap_or(SortField::MarketCap);
+    let initial_desc = params
+        .get(query_keys::DIRECTION)
+        .map(|s| parse_sort_direction(s.as_str()))
+        .unwrap_or(true);
+
+    // Initialize store with URL params (non-reactive, runs once)
+    store.set_search_query(initial_search.clone());
+    store.set_sort_field_direct(initial_sort.clone(), initial_desc);
+
+    // Track the last URL we navigated to, to avoid redundant navigations
+    let (last_url, set_last_url) = signal(build_query_string(
+        &initial_search,
+        &initial_sort,
+        initial_desc,
+    ));
+
     // Create a resource that fetches tokens on mount (works for SSR and CSR)
     let tokens_resource = Resource::new(
         || (), // No reactive dependencies - fetch once on mount
-        move |_| async move {
-            fetch_tokens().await
-        }
+        move |_| async move { fetch_tokens().await },
     );
-    
+
     // Effect to update store when resource loads
     {
         let store = store.clone();
@@ -188,25 +228,25 @@ fn TokenExplorer() -> impl IntoView {
             }
         });
     }
-    
+
     // Client-side polling every 30 seconds
     #[cfg(feature = "hydrate")]
     {
         use wasm_bindgen::JsCast;
-        
+
         let store = store.clone();
         let (interval_id, set_interval_id) = signal::<Option<i32>>(None);
-        
+
         Effect::new(move |_| {
             let store = store.clone();
-            
+
             // Set up the polling interval using web_sys
             let window = web_sys::window().expect("no global window");
-            
+
             let callback = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
                 let store = store.clone();
                 set_is_refreshing.set(true);
-                
+
                 // Spawn the async fetch
                 leptos::task::spawn_local(async move {
                     match fetch_tokens().await {
@@ -221,20 +261,20 @@ fn TokenExplorer() -> impl IntoView {
                     set_is_refreshing.set(false);
                 });
             }) as Box<dyn Fn()>);
-            
+
             let id = window
                 .set_interval_with_callback_and_timeout_and_arguments_0(
                     callback.as_ref().unchecked_ref(),
                     POLL_INTERVAL_MS as i32,
                 )
                 .expect("failed to set interval");
-            
+
             set_interval_id.set(Some(id));
-            
+
             // Prevent the closure from being dropped
             callback.forget();
         });
-        
+
         // Clean up interval on unmount
         on_cleanup(move || {
             if let Some(id) = interval_id.get_untracked() {
@@ -244,7 +284,7 @@ fn TokenExplorer() -> impl IntoView {
             }
         });
     }
-    
+
     // Manual refresh action
     let refresh_action = leptos::prelude::Action::new(move |_: &()| {
         let store = store.clone();
@@ -262,15 +302,37 @@ fn TokenExplorer() -> impl IntoView {
             set_is_refreshing.set(false);
         }
     });
-    
+
+    // Function to update URL with current filter state (avoids redundant navigation)
+    let update_url = {
+        let navigate = navigate.clone();
+        move |search: String, sort: SortField, desc: bool| {
+            let query = build_query_string(&search, &sort, desc);
+
+            // Only navigate if URL actually changed
+            let current_url = last_url.get_untracked();
+            if query != current_url {
+                set_last_url.set(query.clone());
+                let path = format!("/{}", query);
+                navigate(
+                    &path,
+                    NavigateOptions {
+                        replace: true, // Don't create new history entry for filter changes
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+    };
+
     view! {
         <div class="token-explorer">
-            <Header 
-                last_updated=last_updated 
-                is_refreshing=is_refreshing 
+            <Header
+                last_updated=last_updated
+                is_refreshing=is_refreshing
                 on_refresh=move |_| { let _ = refresh_action.dispatch(()); }
             />
-            <SearchAndFilter />
+            <SearchAndFilter update_url=update_url.clone() initial_search=initial_search />
             <Suspense fallback=move || view! { <LoadingState /> }>
                 <TokenGrid />
             </Suspense>
@@ -324,7 +386,7 @@ fn Header(
                             }}
                         </span>
                     </span>
-                    <button 
+                    <button
                         class="refresh-btn"
                         class:refreshing=move || is_refreshing.get()
                         on:click=move |_| on_refresh(())
@@ -361,54 +423,200 @@ fn format_time(iso: &str) -> String {
     iso.to_string()
 }
 
-/// Search and filter controls
+/// Debounce delay for search input (milliseconds)
+#[cfg(feature = "hydrate")]
+const SEARCH_DEBOUNCE_MS: u32 = 300;
+
+/// Search and filter controls with debounced URL sync
+///
+/// Uses a debounce pattern inspired by rxRust:
+/// - Immediate UI feedback (input updates instantly)
+/// - Debounced store/URL updates (waits 300ms after last keystroke)
+/// - Distinct until changed (only updates if value actually changed)
 #[component]
-fn SearchAndFilter() -> impl IntoView {
+fn SearchAndFilter<F>(update_url: F, initial_search: String) -> impl IntoView
+where
+    F: Fn(String, SortField, bool) + Clone + Send + Sync + 'static,
+{
     let store = use_store::<TokenStore>();
-    let store_search = store.clone();
+
+    // Local signal for search input (immediate UI feedback)
+    let (search_input, set_search_input) = signal(initial_search.clone());
+
+    // Track the last committed search (for distinct_until_changed behavior)
+    let (last_committed, set_last_committed) = signal(initial_search);
+
+    // Track debounce timer handle for cleanup
+    #[cfg(feature = "hydrate")]
+    let (timer_handle, set_timer_handle) = signal::<Option<i32>>(None);
+
+    // Clone for different closures
+    #[cfg(feature = "hydrate")]
+    let store_for_debounce = store.clone();
+    #[cfg(feature = "hydrate")]
+    let update_url_for_debounce = update_url.clone();
+    let store_clear = store.clone();
+    let update_url_clear = update_url.clone();
+
+    // Debounced search handler (client-side)
+    #[cfg(feature = "hydrate")]
+    let trigger_debounced_search = move |value: String| {
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen::prelude::*;
+
+        // Cancel any pending timer
+        if let Some(handle) = timer_handle.get_untracked() {
+            if let Some(window) = web_sys::window() {
+                window.clear_timeout_with_handle(handle);
+            }
+        }
+
+        // Set up new debounce timer
+        let store = store_for_debounce.clone();
+        let update_url = update_url_for_debounce.clone();
+
+        let callback = Closure::once(Box::new(move || {
+            // distinct_until_changed: only update if value changed
+            let last = last_committed.get_untracked();
+            if value != last {
+                set_last_committed.set(value.clone());
+
+                // Update store
+                store.set_search_query(value.clone());
+
+                // Update URL (use untracked to avoid reactive warnings)
+                let sort = store.sort_by_untracked();
+                let desc = store.is_sort_desc_untracked();
+                update_url(value, sort, desc);
+            }
+        }) as Box<dyn FnOnce()>);
+
+        if let Some(window) = web_sys::window() {
+            if let Ok(handle) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                callback.as_ref().unchecked_ref(),
+                SEARCH_DEBOUNCE_MS as i32,
+            ) {
+                set_timer_handle.set(Some(handle));
+            }
+        }
+
+        // Prevent closure from being dropped
+        callback.forget();
+    };
+
+    // SSR fallback - no debounce
+    #[cfg(not(feature = "hydrate"))]
+    let trigger_debounced_search = {
+        let store = store.clone();
+        let update_url = update_url.clone();
+        move |value: String| {
+            // distinct_until_changed
+            let last = last_committed.get_untracked();
+            if value != last {
+                set_last_committed.set(value.clone());
+                store.set_search_query(value.clone());
+                let sort = store.sort_by_untracked();
+                let desc = store.is_sort_desc_untracked();
+                update_url(value, sort, desc);
+            }
+        }
+    };
 
     view! {
         <div class="controls">
             <div class="search-box">
                 <input
                     type="text"
-                    placeholder="Search tokens..."
-                    prop:value=move || store.search_query()
-                    on:input:target=move |ev| {
-                        store_search.set_search_query(ev.target().value());
+                    placeholder="Search tokens by name, symbol, or address..."
+                    prop:value=move || search_input.get()
+                    on:input:target={
+                        let trigger = trigger_debounced_search.clone();
+                        move |ev| {
+                            let value = ev.target().value();
+                            // Immediate UI update
+                            set_search_input.set(value.clone());
+                            // Debounced store/URL update
+                            trigger(value);
+                        }
                     }
                 />
+                <button
+                    class="clear-search"
+                    class:hidden=move || search_input.get().is_empty()
+                    on:click={
+                        let store_for_btn = store_clear.clone();
+                        let update_url_for_btn = update_url_clear.clone();
+                        move |_| {
+                            set_search_input.set(String::new());
+                            set_last_committed.set(String::new());
+                            store_for_btn.set_search_query(String::new());
+
+                            let sort = store_for_btn.sort_by_untracked();
+                            let desc = store_for_btn.is_sort_desc_untracked();
+                            update_url_for_btn(String::new(), sort, desc);
+                        }
+                    }
+                >
+                    "×"
+                </button>
             </div>
             <div class="sort-buttons">
-                <SortButton field=SortField::MarketCap label="MCap" />
-                <SortButton field=SortField::PriceChange24h label="24h %" />
-                <SortButton field=SortField::Liquidity label="Liq" />
-                <SortButton field=SortField::Holders label="Holders" />
+                <SortButton field=SortField::MarketCap label="MCap" update_url=update_url.clone() />
+                <SortButton field=SortField::PriceChange24h label="24h %" update_url=update_url.clone() />
+                <SortButton field=SortField::Liquidity label="Liq" update_url=update_url.clone() />
+                <SortButton field=SortField::Holders label="Holders" update_url=update_url.clone() />
             </div>
         </div>
     }
 }
 
-/// Sort button component
+/// Sort button component with URL sync
 #[component]
-fn SortButton(field: SortField, label: &'static str) -> impl IntoView {
+fn SortButton<F>(field: SortField, label: &'static str, update_url: F) -> impl IntoView
+where
+    F: Fn(String, SortField, bool) + Clone + Send + Sync + 'static,
+{
     let store = use_store::<TokenStore>();
     let field_clone = field.clone();
     let field_for_click = field.clone();
+    let field_for_indicator = field.clone();
+
+    // Clone store for different closures
     let store_active = store.clone();
-    let store_desc = store.clone();
     let store_click = store.clone();
+    let store_indicator = store.clone();
 
     view! {
         <button
             class="sort-btn"
             class:active=move || store_active.sort_by() == field_clone.clone()
-            on:click=move |_| store_click.set_sort_by(field_for_click.clone())
+            on:click={
+                let update_url = update_url.clone();
+                move |_| {
+                    // Toggle or set sort (use untracked to avoid reactive warnings)
+                    let current_sort = store_click.sort_by_untracked();
+                    let current_desc = store_click.is_sort_desc_untracked();
+
+                    let (new_sort, new_desc) = if current_sort == field_for_click {
+                        // Toggle direction
+                        (field_for_click.clone(), !current_desc)
+                    } else {
+                        // New field, default to descending
+                        (field_for_click.clone(), true)
+                    };
+
+                    // Update store
+                    store_click.set_sort_field_direct(new_sort.clone(), new_desc);
+
+                    // Update URL (use untracked for search query)
+                    update_url(store_click.search_query_untracked(), new_sort, new_desc);
+                }
+            }
         >
             {label}
             {move || {
-                if store.sort_by() == field.clone() {
-                    if store_desc.is_sort_desc() { " ↓" } else { " ↑" }
+                if store_indicator.sort_by() == field_for_indicator.clone() {
+                    if store_indicator.is_sort_desc() { " ↓" } else { " ↑" }
                 } else {
                     ""
                 }
@@ -455,7 +663,7 @@ fn TokenCard(token: Token) -> impl IntoView {
 
     let icon_url = token.icon.clone().unwrap_or_default();
     let has_icon = !icon_url.is_empty();
-    
+
     let token_name = token.name.clone();
     let token_symbol = token.symbol.clone();
     let token_symbol_icon = token.symbol.clone();
@@ -555,7 +763,7 @@ fn TokenDetail() -> impl IntoView {
                 let is_positive = price_change_24h >= 0.0;
                 let icon_url = token.icon.clone().unwrap_or_default();
                 let has_icon = !icon_url.is_empty();
-                
+
                 // Pre-compute all values to avoid reference issues
                 let token_name = token.name.clone();
                 let token_symbol = token.symbol.clone();
@@ -570,7 +778,7 @@ fn TokenDetail() -> impl IntoView {
                 let website = token.website.clone();
                 let stats_24h = token.stats_24h.clone();
                 let audit = token.audit.clone();
-                
+
                 let store_close_inner = store_close.clone();
                 let store_close_btn = store_close2.clone();
 

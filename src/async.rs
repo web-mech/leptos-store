@@ -216,13 +216,15 @@ pub trait AsyncAction<S: Store>: Send + Sync {
     type Error: Send + std::error::Error;
 
     /// Execute the action asynchronously.
-    fn execute(&self, store: &S) -> impl Future<Output = ActionResult<Self::Output, Self::Error>> + Send;
+    fn execute(
+        &self,
+        store: &S,
+    ) -> impl Future<Output = ActionResult<Self::Output, Self::Error>> + Send;
 }
 
 /// A boxed async action for type erasure.
-pub type BoxedAsyncAction<S, O, E> = Box<
-    dyn Fn(&S) -> BoxFuture<'static, ActionResult<O, E>> + Send + Sync,
->;
+pub type BoxedAsyncAction<S, O, E> =
+    Box<dyn Fn(&S) -> BoxFuture<'static, ActionResult<O, E>> + Send + Sync>;
 
 /// Builder for constructing async actions with fluent API.
 ///

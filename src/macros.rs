@@ -361,13 +361,18 @@ macro_rules! impl_hydratable_store {
         impl $crate::hydration::HydratableStore for $store {
             fn serialize_state(&self) -> Result<String, $crate::hydration::StoreHydrationError> {
                 let state = self.state.get();
-                ::serde_json::to_string(&state)
-                    .map_err(|e| $crate::hydration::StoreHydrationError::Serialization(e.to_string()))
+                ::serde_json::to_string(&state).map_err(|e| {
+                    $crate::hydration::StoreHydrationError::Serialization(e.to_string())
+                })
             }
 
-            fn from_hydrated_state(data: &str) -> Result<Self, $crate::hydration::StoreHydrationError> {
+            fn from_hydrated_state(
+                data: &str,
+            ) -> Result<Self, $crate::hydration::StoreHydrationError> {
                 let state: <Self as $crate::store::Store>::State = ::serde_json::from_str(data)
-                    .map_err(|e| $crate::hydration::StoreHydrationError::Deserialization(e.to_string()))?;
+                    .map_err(|e| {
+                        $crate::hydration::StoreHydrationError::Deserialization(e.to_string())
+                    })?;
                 Ok(Self {
                     state: ::leptos::prelude::RwSignal::new(state),
                 })
@@ -1055,8 +1060,8 @@ macro_rules! define_mutator {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use leptos::prelude::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_define_state_basic() {
