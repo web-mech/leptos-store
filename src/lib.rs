@@ -27,17 +27,39 @@
 //!
 //! **Only mutators may write state.**
 //!
+//! ## Feature Flags
+//!
+//! | Feature | Description |
+//! |---------|-------------|
+//! | `ssr` | Server-side rendering support (default) |
+//! | `hydrate` | SSR hydration support with state serialization |
+//! | `csr` | Client-side rendering only |
+//!
 //! ## Available Macros
 //!
-//! | Macro | Purpose |
-//! |-------|---------|
-//! | [`define_state!`] | Define state structs with default values |
-//! | [`define_action!`] | Define synchronous action structs |
-//! | [`define_async_action!`] | Define async action structs with error types |
-//! | [`impl_store!`] | Implement Store trait for an existing type |
-//! | [`store!`] | Complete store definition in one macro |
+//! | Macro | Purpose | Feature |
+//! |-------|---------|---------|
+//! | [`define_state!`] | Define state structs with default values | - |
+//! | [`define_hydratable_state!`] | Define state with serde derives | `hydrate` |
+//! | [`define_action!`] | Define synchronous action structs | - |
+//! | [`define_async_action!`] | Define async action structs with error types | - |
+//! | [`impl_store!`] | Implement Store trait for an existing type | - |
+//! | [`impl_hydratable_store!`] | Implement HydratableStore trait | `hydrate` |
+//! | [`store!`] | Complete store definition in one macro | - |
 //!
 //! See the [`macros`] module for detailed documentation and examples.
+//!
+//! ## Hydration Support
+//!
+//! When building SSR applications, enable the `hydrate` feature to support
+//! state transfer from server to client:
+//!
+//! ```toml
+//! [dependencies]
+//! leptos-store = { version = "0.1", features = ["hydrate"] }
+//! ```
+//!
+//! See the [`hydration`] module for details on implementing hydration.
 //!
 //! ## Example
 //!
@@ -85,6 +107,9 @@ pub mod r#async;
 pub mod context;
 pub mod macros;
 pub mod store;
+
+#[cfg(feature = "hydrate")]
+pub mod hydration;
 
 pub mod prelude;
 
