@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! Prelude module - re-exports all commonly used types and traits.
 //!
 //! Import this module to get started quickly:

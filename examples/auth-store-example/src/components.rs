@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! UI Components for the Auth Store Example
 //!
 //! This module provides Leptos components that demonstrate

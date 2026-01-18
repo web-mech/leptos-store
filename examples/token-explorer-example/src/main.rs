@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! Server entry point for the Token Explorer Example
 //!
 //! Fetches token data from Jupiter API on each request and renders with SSR.

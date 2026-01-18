@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! # leptos-store
 //!
 //! Enterprise-grade, type-enforced state management for Leptos.

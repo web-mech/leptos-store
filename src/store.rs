@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! Core store traits and types.
 //!
 //! This module provides the foundational abstractions for building stores:

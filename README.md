@@ -3,14 +3,14 @@
 > Enterprise-grade, type-enforced state management for Leptos
 
 [![Crates.io](https://img.shields.io/crates/v/leptos-store.svg)](https://crates.io/crates/leptos-store)
-[![Documentation](https://docs.rs/leptos-store/badge.svg)](https://docs.rs/leptos-store)
+[![Documentation](https://img.shields.io/docsrs/leptos-store/latest)](https://docs.rs/leptos-store)
 [![License](https://img.shields.io/crates/l/leptos-store.svg)](LICENSE)
 
 ## Overview
 
 `leptos-store` provides a structured, SSR-safe state management architecture for [Leptos](https://leptos.dev), inspired by **Vuex** and **Pinia**, translated into idiomatic Rust.
 
-Leptos provides excellent primitives (signals, context, resources), but no canonical, scalable state architecture. This creates problems for large teams, enterprise governance, long-lived applications, SSR correctness, and auditing.
+Leptos provides excellent low-level primitives (signals, context, resources), but intentionally does not define a canonical, scalable state architecture. At scale, this absence can create challenges for large teams, enterprise governance, long-lived applications, SSR safety, and state auditing unless additional architectural patterns are introduced.
 
 **leptos-store exists to solve structure, not reactivity.**
 
@@ -515,6 +515,13 @@ make test    # Run tests
 make help    # See all commands
 ```
 
-## License
+## License and Attribution
 
-MIT OR Apache-2.0
+leptos-store is licensed under the [Apache License, Version 2.0](./LICENSE).
+
+You are free to use, modify, and distribute this software, including for
+commercial purposes, provided that you retain the license text and the
+NOTICE file as required by the Apache 2.0 License.
+
+This software is provided "AS IS", without warranty of any kind. The author
+is not liable for any damages arising from its use.

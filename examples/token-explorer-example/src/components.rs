@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! UI Components for the Token Explorer Example
 //!
 //! Displays Solana token data with price changes, stats, and filtering.

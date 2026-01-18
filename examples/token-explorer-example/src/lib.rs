@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! Token Explorer Example
 //!
 //! Demonstrates SSR hydration with leptos-store using real API data

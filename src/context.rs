@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! Context management for stores.
 //!
 //! This module provides utilities for integrating stores with Leptos'

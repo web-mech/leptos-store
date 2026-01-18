@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! Token Store - State management for Solana token data
 //!
 //! This store manages token data fetched from the Jupiter API,

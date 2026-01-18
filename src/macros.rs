@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 web-mech
+
 //! Macros for store definition.
 //!
 //! This module provides declarative macros for defining stores, state, actions,
