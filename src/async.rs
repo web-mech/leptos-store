@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Mike Price
+
 //! Async actions support for stores.
 //!
 //! This module provides infrastructure for async operations in stores,
