@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Mike Price
+
 //! Authentication Store
 //!
 //! This module defines the authentication store with all its
