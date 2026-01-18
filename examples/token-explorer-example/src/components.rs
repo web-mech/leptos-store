@@ -1,16 +1,98 @@
 //! UI Components for the Token Explorer Example
 //!
 //! Displays Solana token data with price changes, stats, and filtering.
+//! Features:
+//! - SSR data fetching with per-request freshness
+//! - Client-side polling every 30 seconds
+//! - URL-based search and filtering (works with SSR and CSR)
+//! - Shareable URLs that preserve filter state
 
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Meta, Stylesheet, Title};
 use leptos_router::{
     components::{Route, Router, Routes},
+    hooks::{use_navigate, use_query_map},
+    NavigateOptions,
     path,
 };
 use leptos_store::prelude::*;
 
-use crate::token_store::{SortField, Token, TokenStore};
+use crate::token_store::{fetch_tokens, SortField, Token, TokenStore};
+
+// ============================================================================
+// URL Query Parameter Handling
+// ============================================================================
+
+/// Query parameter keys
+mod query_keys {
+    pub const SEARCH: &str = "q";
+    pub const SORT: &str = "sort";
+    pub const DIRECTION: &str = "dir";
+}
+
+/// Parse SortField from URL query parameter
+fn parse_sort_field(value: &str) -> SortField {
+    match value.to_lowercase().as_str() {
+        "mcap" | "marketcap" => SortField::MarketCap,
+        "price" => SortField::Price,
+        "change" | "24h" => SortField::PriceChange24h,
+        "liq" | "liquidity" => SortField::Liquidity,
+        "holders" => SortField::Holders,
+        "volume" => SortField::Volume24h,
+        _ => SortField::MarketCap, // Default
+    }
+}
+
+/// Convert SortField to URL query parameter value
+fn sort_field_to_param(field: &SortField) -> &'static str {
+    match field {
+        SortField::MarketCap => "mcap",
+        SortField::Price => "price",
+        SortField::PriceChange24h => "change",
+        SortField::Liquidity => "liq",
+        SortField::Holders => "holders",
+        SortField::Volume24h => "volume",
+    }
+}
+
+/// Parse sort direction from URL query parameter
+fn parse_sort_direction(value: &str) -> bool {
+    // Returns true for descending
+    match value.to_lowercase().as_str() {
+        "asc" | "a" => false,
+        _ => true, // Default to descending
+    }
+}
+
+/// Convert sort direction to URL query parameter value
+fn direction_to_param(desc: bool) -> &'static str {
+    if desc { "desc" } else { "asc" }
+}
+
+/// Build query string from current filter state
+fn build_query_string(search: &str, sort: &SortField, desc: bool) -> String {
+    let mut params = Vec::new();
+    
+    if !search.is_empty() {
+        params.push(format!("{}={}", query_keys::SEARCH, urlencoding::encode(search)));
+    }
+    
+    // Only include sort params if not default
+    if *sort != SortField::MarketCap || !desc {
+        params.push(format!("{}={}", query_keys::SORT, sort_field_to_param(sort)));
+        params.push(format!("{}={}", query_keys::DIRECTION, direction_to_param(desc)));
+    }
+    
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", params.join("&"))
+    }
+}
+
+/// Polling interval in milliseconds (30 seconds)
+#[cfg(feature = "hydrate")]
+const POLL_INTERVAL_MS: u32 = 30_000;
 
 /// Read hydration data from a script tag in the DOM
 #[cfg(feature = "hydrate")]
@@ -42,7 +124,7 @@ fn format_with_commas(n: u64) -> String {
 pub fn App() -> impl IntoView {
     provide_meta_context();
 
-    // On server: Store is already provided by main.rs with pre-fetched tokens
+    // On server: Store is already provided by main.rs
     // On client (hydrate): Read serialized state and create store
     #[cfg(feature = "hydrate")]
     {
@@ -78,22 +160,143 @@ pub fn App() -> impl IntoView {
     }
 }
 
-/// Main token explorer page
+/// Main token explorer page with SSR data fetching and client-side polling
 #[component]
 fn TokenExplorer() -> impl IntoView {
+    let store = use_store::<TokenStore>();
+    
+    // Signal to track last update time
+    let (last_updated, set_last_updated) = signal(String::new());
+    let (is_refreshing, set_is_refreshing) = signal(false);
+    
+    // Create a resource that fetches tokens on mount (works for SSR and CSR)
+    let tokens_resource = Resource::new(
+        || (), // No reactive dependencies - fetch once on mount
+        move |_| async move {
+            fetch_tokens().await
+        }
+    );
+    
+    // Effect to update store when resource loads
+    {
+        let store = store.clone();
+        Effect::new(move |_| {
+            if let Some(Ok(response)) = tokens_resource.get() {
+                store.set_tokens(response.tokens);
+                set_last_updated.set(response.fetched_at);
+                set_is_refreshing.set(false);
+            }
+        });
+    }
+    
+    // Client-side polling every 30 seconds
+    #[cfg(feature = "hydrate")]
+    {
+        use wasm_bindgen::JsCast;
+        
+        let store = store.clone();
+        let (interval_id, set_interval_id) = signal::<Option<i32>>(None);
+        
+        Effect::new(move |_| {
+            let store = store.clone();
+            
+            // Set up the polling interval using web_sys
+            let window = web_sys::window().expect("no global window");
+            
+            let callback = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
+                let store = store.clone();
+                set_is_refreshing.set(true);
+                
+                // Spawn the async fetch
+                leptos::task::spawn_local(async move {
+                    match fetch_tokens().await {
+                        Ok(response) => {
+                            store.set_tokens(response.tokens);
+                            set_last_updated.set(response.fetched_at);
+                        }
+                        Err(e) => {
+                            store.set_error(Some(format!("Refresh failed: {}", e)));
+                        }
+                    }
+                    set_is_refreshing.set(false);
+                });
+            }) as Box<dyn Fn()>);
+            
+            let id = window
+                .set_interval_with_callback_and_timeout_and_arguments_0(
+                    callback.as_ref().unchecked_ref(),
+                    POLL_INTERVAL_MS as i32,
+                )
+                .expect("failed to set interval");
+            
+            set_interval_id.set(Some(id));
+            
+            // Prevent the closure from being dropped
+            callback.forget();
+        });
+        
+        // Clean up interval on unmount
+        on_cleanup(move || {
+            if let Some(id) = interval_id.get_untracked() {
+                if let Some(window) = web_sys::window() {
+                    window.clear_interval_with_handle(id);
+                }
+            }
+        });
+    }
+    
+    // Manual refresh action
+    let refresh_action = leptos::prelude::Action::new(move |_: &()| {
+        let store = store.clone();
+        async move {
+            set_is_refreshing.set(true);
+            match fetch_tokens().await {
+                Ok(response) => {
+                    store.set_tokens(response.tokens);
+                    set_last_updated.set(response.fetched_at);
+                }
+                Err(e) => {
+                    store.set_error(Some(format!("Refresh failed: {}", e)));
+                }
+            }
+            set_is_refreshing.set(false);
+        }
+    });
+    
     view! {
         <div class="token-explorer">
-            <Header />
+            <Header 
+                last_updated=last_updated 
+                is_refreshing=is_refreshing 
+                on_refresh=move |_| { let _ = refresh_action.dispatch(()); }
+            />
             <SearchAndFilter />
-            <TokenGrid />
+            <Suspense fallback=move || view! { <LoadingState /> }>
+                <TokenGrid />
+            </Suspense>
             <TokenDetail />
         </div>
     }
 }
 
-/// Page header
+/// Loading state component
 #[component]
-fn Header() -> impl IntoView {
+fn LoadingState() -> impl IntoView {
+    view! {
+        <div class="loading-state">
+            <div class="loading-spinner"></div>
+            <p>"Loading tokens..."</p>
+        </div>
+    }
+}
+
+/// Page header with last updated time and refresh button
+#[component]
+fn Header(
+    last_updated: ReadSignal<String>,
+    is_refreshing: ReadSignal<bool>,
+    on_refresh: impl Fn(()) + 'static,
+) -> impl IntoView {
     let store = use_store::<TokenStore>();
 
     view! {
@@ -108,10 +311,54 @@ fn Header() -> impl IntoView {
                         <span class="stat-label">"Tokens"</span>
                         <span class="stat-value">{move || store.token_count()}</span>
                     </span>
+                    <span class="stat update-info">
+                        <span class="stat-label">"Updated"</span>
+                        <span class="stat-value">
+                            {move || {
+                                let updated = last_updated.get();
+                                if updated.is_empty() {
+                                    "Loading...".to_string()
+                                } else {
+                                    format_time(&updated)
+                                }
+                            }}
+                        </span>
+                    </span>
+                    <button 
+                        class="refresh-btn"
+                        class:refreshing=move || is_refreshing.get()
+                        on:click=move |_| on_refresh(())
+                        disabled=move || is_refreshing.get()
+                    >
+                        {move || if is_refreshing.get() { "⟳" } else { "↻" }}
+                    </button>
                 </div>
+            </div>
+            <div class="poll-indicator">
+                <span class="poll-text">"Auto-refresh every 30s"</span>
+                {move || if is_refreshing.get() {
+                    view! { <span class="refreshing-indicator">" • Refreshing..."</span> }.into_any()
+                } else {
+                    view! { <span></span> }.into_any()
+                }}
             </div>
         </header>
     }
+}
+
+/// Format ISO timestamp to human-readable time
+fn format_time(iso: &str) -> String {
+    // Extract time portion from ISO format (HH:MM:SS)
+    if let Some(t_pos) = iso.find('T') {
+        let time_part = &iso[t_pos + 1..];
+        if let Some(z_pos) = time_part.find('Z') {
+            return time_part[..z_pos].to_string();
+        }
+        if time_part.len() >= 8 {
+            return time_part[..8].to_string();
+        }
+    }
+    iso.to_string()
 }
 
 /// Search and filter controls
