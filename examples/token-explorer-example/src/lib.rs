@@ -1,0 +1,32 @@
+//! Token Explorer Example
+//!
+//! Demonstrates SSR hydration with leptos-store using real API data
+//! from the Jupiter token API.
+//!
+//! Features:
+//! - Server-side data fetching
+//! - State hydration to client
+//! - Reactive token filtering and sorting
+//! - Beautiful token card UI
+
+pub mod components;
+pub mod token_store;
+
+pub use components::*;
+pub use token_store::*;
+
+/// Hydration entry point
+#[cfg(feature = "hydrate")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn hydrate() {
+    console_error_panic_hook::set_once();
+    leptos::mount::hydrate_body(components::App);
+}
+
+/// CSR entry point
+#[cfg(feature = "csr")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn main() {
+    console_error_panic_hook::set_once();
+    leptos::mount::mount_to_body(components::App);
+}
