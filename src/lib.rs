@@ -126,8 +126,8 @@
 //! }
 //! ```
 
-// Enable doc_auto_cfg for docs.rs to show feature requirements
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+// Enable doc_cfg for docs.rs to show feature requirements
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![deny(unsafe_code)]
