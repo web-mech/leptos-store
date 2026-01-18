@@ -90,7 +90,7 @@ fn Counter() -> impl IntoView {
     let store_dec = store.clone();
     let store_reset = store.clone();
     let store_prime = store.clone();
-    
+
     view! {
         <div class="counter">
             // Current count display
