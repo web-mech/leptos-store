@@ -166,7 +166,7 @@ fn format_large_number(n: f64) -> String {
     } else if n >= 1_000.0 {
         format!("${:.2}K", n / 1_000.0)
     } else {
-        format!("${:.2}", n)
+        format!("${n:.2}")
     }
 }
 
@@ -506,7 +506,7 @@ pub const DEFAULT_TOKEN_IDS: &[&str] = &[
 /// Build the API URL for fetching tokens
 pub fn build_api_url(token_ids: &[&str], limit: usize) -> String {
     let query = token_ids.join(",");
-    format!("{}?query={}&limit={}", JUPITER_API_BASE, query, limit)
+    format!("{JUPITER_API_BASE}?query={query}&limit={limit}")
 }
 
 /// Fetch tokens from the Jupiter API (server-side internal function)
