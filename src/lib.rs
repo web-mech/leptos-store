@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Mike Price
+
 //! # leptos-store
 //!
 //! Enterprise-grade, type-enforced state management for Leptos.
