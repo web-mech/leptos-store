@@ -6,7 +6,9 @@
 
 .PHONY: all build check test test-all clippy fmt fmt-check doc doc-open \
         clean example example-build example-release publish publish-dry \
-        deps audit outdated help
+        deps audit outdated help examples-list run build-example build-example-release \
+        test-example-pkg check-example clean-example test-all-examples \
+        check-all-examples clean-all-examples
 
 # Colors for terminal output
 CYAN := \033[36m
@@ -133,8 +135,19 @@ doc-private:
 	cargo doc --workspace --no-deps --document-private-items
 
 # ============================================================================
-# Example Application
+# Example Applications (Generic)
 # ============================================================================
+# Use these commands to work with any example in the examples/ folder.
+# Pass NAME=<example-name> to specify which example to use.
+#
+# Examples:
+#   make examples-list                    # List all available examples
+#   make run NAME=token-explorer-example  # Run specific example
+#   make build-example NAME=auth-store-example  # Build specific example
+# ============================================================================
+
+# Default example (for backwards compatibility)
+DEFAULT_EXAMPLE := auth-store-example
 
 ## Install cargo-leptos if not present
 leptos-install:
@@ -155,13 +168,172 @@ wasm-target:
 example-setup: wasm-target
 	@echo "$(GREEN)Example setup complete!$(RESET)"
 
-## Run the example in SSR mode (recommended)
+## List all available examples
+examples-list:
+	@echo "$(CYAN)Available examples:$(RESET)"
+	@for dir in examples/*/; do \
+		name=$$(basename "$$dir"); \
+		if [ -f "$$dir/Cargo.toml" ]; then \
+			desc=$$(grep '^description' "$$dir/Cargo.toml" 2>/dev/null | head -1 | sed 's/.*= *"\(.*\)"/\1/' || echo ""); \
+			port=$$(grep 'site-addr' "$$dir/Cargo.toml" 2>/dev/null | head -1 | sed 's/.*:\([0-9]*\)".*/\1/' || echo "N/A"); \
+			echo "  $(GREEN)$$name$(RESET)"; \
+			if [ -n "$$desc" ]; then echo "    $$desc"; fi; \
+			if [ "$$port" != "N/A" ] && [ -n "$$port" ]; then echo "    Port: $$port"; fi; \
+		fi \
+	done
+	@echo ""
+	@echo "$(YELLOW)Usage:$(RESET)"
+	@echo "  make run NAME=<example-name>"
+	@echo "  make build-example NAME=<example-name>"
+	@echo "  make test-example-pkg NAME=<example-name>"
+
+## Run an example by name (SSR mode with cargo-leptos)
+## Usage: make run NAME=token-explorer-example
+run: example-setup leptos-install
+	@if [ -z "$(NAME)" ]; then \
+		echo "$(RED)Error: NAME is required$(RESET)"; \
+		echo "Usage: make run NAME=<example-name>"; \
+		echo "Run 'make examples-list' to see available examples"; \
+		exit 1; \
+	fi
+	@if [ ! -d "examples/$(NAME)" ]; then \
+		echo "$(RED)Error: Example '$(NAME)' not found$(RESET)"; \
+		echo "Run 'make examples-list' to see available examples"; \
+		exit 1; \
+	fi
+	@port=$$(grep 'site-addr' "examples/$(NAME)/Cargo.toml" 2>/dev/null | head -1 | sed 's/.*:\([0-9]*\)".*/\1/' || echo "3000"); \
+	echo "$(CYAN)Starting $(NAME) (SSR mode)...$(RESET)"; \
+	echo "$(YELLOW)Open http://127.0.0.1:$$port in your browser$(RESET)"; \
+	cd examples/$(NAME) && cargo leptos watch
+
+## Build an example by name (SSR mode)
+## Usage: make build-example NAME=token-explorer-example
+build-example: example-setup leptos-install
+	@if [ -z "$(NAME)" ]; then \
+		echo "$(RED)Error: NAME is required$(RESET)"; \
+		echo "Usage: make build-example NAME=<example-name>"; \
+		exit 1; \
+	fi
+	@if [ ! -d "examples/$(NAME)" ]; then \
+		echo "$(RED)Error: Example '$(NAME)' not found$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Building $(NAME) (SSR)...$(RESET)"
+	cd examples/$(NAME) && cargo leptos build
+
+## Build an example in release mode (SSR)
+## Usage: make build-example-release NAME=token-explorer-example
+build-example-release: example-setup leptos-install
+	@if [ -z "$(NAME)" ]; then \
+		echo "$(RED)Error: NAME is required$(RESET)"; \
+		echo "Usage: make build-example-release NAME=<example-name>"; \
+		exit 1; \
+	fi
+	@if [ ! -d "examples/$(NAME)" ]; then \
+		echo "$(RED)Error: Example '$(NAME)' not found$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Building $(NAME) (SSR, release)...$(RESET)"
+	cd examples/$(NAME) && cargo leptos build --release
+
+## Test an example by name
+## Usage: make test-example-pkg NAME=token-explorer-example
+test-example-pkg:
+	@if [ -z "$(NAME)" ]; then \
+		echo "$(RED)Error: NAME is required$(RESET)"; \
+		echo "Usage: make test-example-pkg NAME=<example-name>"; \
+		exit 1; \
+	fi
+	@if [ ! -d "examples/$(NAME)" ]; then \
+		echo "$(RED)Error: Example '$(NAME)' not found$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Testing $(NAME)...$(RESET)"
+	cargo test -p $(NAME) --features hydrate
+
+## Check an example compiles (both SSR and hydrate)
+## Usage: make check-example NAME=token-explorer-example
+check-example:
+	@if [ -z "$(NAME)" ]; then \
+		echo "$(RED)Error: NAME is required$(RESET)"; \
+		echo "Usage: make check-example NAME=<example-name>"; \
+		exit 1; \
+	fi
+	@if [ ! -d "examples/$(NAME)" ]; then \
+		echo "$(RED)Error: Example '$(NAME)' not found$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Checking $(NAME) (SSR)...$(RESET)"
+	cargo check -p $(NAME) --features ssr
+	@echo "$(CYAN)Checking $(NAME) (hydrate)...$(RESET)"
+	cargo check -p $(NAME) --features hydrate --target wasm32-unknown-unknown
+
+## Clean an example's build artifacts
+## Usage: make clean-example NAME=token-explorer-example
+clean-example:
+	@if [ -z "$(NAME)" ]; then \
+		echo "$(RED)Error: NAME is required$(RESET)"; \
+		echo "Usage: make clean-example NAME=<example-name>"; \
+		exit 1; \
+	fi
+	@if [ ! -d "examples/$(NAME)" ]; then \
+		echo "$(RED)Error: Example '$(NAME)' not found$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Cleaning $(NAME) build artifacts...$(RESET)"
+	rm -rf examples/$(NAME)/dist
+	rm -rf examples/$(NAME)/target/site
+
+## Run all examples' tests
+test-all-examples:
+	@echo "$(CYAN)Testing all examples...$(RESET)"
+	@for dir in examples/*/; do \
+		name=$$(basename "$$dir"); \
+		if [ -f "$$dir/Cargo.toml" ]; then \
+			echo "$(CYAN)Testing $$name...$(RESET)"; \
+			cargo test -p "$$name" --features hydrate || exit 1; \
+		fi \
+	done
+	@echo "$(GREEN)All example tests passed!$(RESET)"
+
+## Check all examples compile
+check-all-examples: wasm-target
+	@echo "$(CYAN)Checking all examples...$(RESET)"
+	@for dir in examples/*/; do \
+		name=$$(basename "$$dir"); \
+		if [ -f "$$dir/Cargo.toml" ]; then \
+			echo "$(CYAN)Checking $$name (SSR)...$(RESET)"; \
+			cargo check -p "$$name" --features ssr || exit 1; \
+			echo "$(CYAN)Checking $$name (hydrate)...$(RESET)"; \
+			cargo check -p "$$name" --features hydrate --target wasm32-unknown-unknown || exit 1; \
+		fi \
+	done
+	@echo "$(GREEN)All examples compile!$(RESET)"
+
+## Clean all examples' build artifacts
+clean-all-examples:
+	@echo "$(CYAN)Cleaning all example build artifacts...$(RESET)"
+	@for dir in examples/*/; do \
+		name=$$(basename "$$dir"); \
+		rm -rf "$$dir/dist"; \
+		rm -rf "$$dir/target/site"; \
+	done
+	@echo "$(GREEN)All example artifacts cleaned!$(RESET)"
+
+# ============================================================================
+# Legacy Example Commands (auth-store-example specific)
+# ============================================================================
+# These commands are kept for backwards compatibility.
+# Consider using the generic commands above instead.
+# ============================================================================
+
+## Run the auth-store-example (SSR mode) - LEGACY
 example: example-setup leptos-install
 	@echo "$(CYAN)Starting auth-store-example (SSR mode)...$(RESET)"
 	@echo "$(YELLOW)Open http://127.0.0.1:3000 in your browser$(RESET)"
 	cd examples/auth-store-example && cargo leptos watch
 
-## Run the example in SSR mode (manual - without cargo-leptos)
+## Run the auth-store-example in SSR mode (manual - without cargo-leptos)
 example-ssr: example-setup example-ssr-build-wasm
 	@echo "$(CYAN)Starting server...$(RESET)"
 	@echo "$(YELLOW)Open http://127.0.0.1:3000 in your browser$(RESET)"
@@ -184,38 +356,38 @@ example-ssr-build-wasm:
 	cp examples/auth-store-example/style/main.css examples/auth-store-example/target/site/pkg/auth-store-example.css
 	@echo "$(GREEN)Assets ready in target/site/pkg/$(RESET)"
 
-## Run the example in CSR mode (with trunk)
+## Run the auth-store-example in CSR mode (with trunk)
 example-csr: example-setup trunk-install
 	@echo "$(CYAN)Starting auth-store-example (CSR mode)...$(RESET)"
 	@echo "$(YELLOW)Open http://localhost:8080 in your browser$(RESET)"
 	cd examples/auth-store-example && trunk serve --features csr
 
-## Run the example on a specific port (CSR mode)
+## Run the auth-store-example on a specific port (CSR mode)
 example-port: example-setup trunk-install
 	@echo "$(CYAN)Starting auth-store-example on port $(PORT)...$(RESET)"
 	cd examples/auth-store-example && trunk serve --features csr --port $(PORT)
 
-## Build the example for production (SSR)
+## Build the auth-store-example for production (SSR)
 example-build: example-setup leptos-install
 	@echo "$(CYAN)Building auth-store-example (SSR)...$(RESET)"
 	cd examples/auth-store-example && cargo leptos build
 
-## Build the example for production (SSR, optimized)
+## Build the auth-store-example for production (SSR, optimized)
 example-release: example-setup leptos-install
 	@echo "$(CYAN)Building auth-store-example (SSR, release)...$(RESET)"
 	cd examples/auth-store-example && cargo leptos build --release
 
-## Build the example for CSR
+## Build the auth-store-example for CSR
 example-build-csr: example-setup trunk-install
 	@echo "$(CYAN)Building auth-store-example (CSR)...$(RESET)"
 	cd examples/auth-store-example && trunk build --features csr
 
-## Build the example for CSR (optimized)
+## Build the auth-store-example for CSR (optimized)
 example-release-csr: example-setup trunk-install
 	@echo "$(CYAN)Building auth-store-example (CSR, release)...$(RESET)"
 	cd examples/auth-store-example && trunk build --release --features csr
 
-## Clean example build artifacts
+## Clean auth-store-example build artifacts
 example-clean:
 	@echo "$(CYAN)Cleaning example build artifacts...$(RESET)"
 	rm -rf examples/auth-store-example/dist
@@ -356,6 +528,7 @@ help:
 	@echo ""
 	@echo "$(GREEN)Usage:$(RESET)"
 	@echo "  make [target]"
+	@echo "  make [target] NAME=<example-name>  # For example-specific commands"
 	@echo ""
 	@echo "$(GREEN)Building:$(RESET)"
 	@echo "  build          Build the library in debug mode"
@@ -368,7 +541,7 @@ help:
 	@echo "  test-verbose   Run tests with output"
 	@echo "  test-lib       Run only library tests"
 	@echo "  test-doc       Run only doc tests"
-	@echo "  test-example   Run example tests"
+	@echo "  test-example   Run auth-store-example tests"
 	@echo "  test-all       Run all tests with all features"
 	@echo "  coverage       Run tests with coverage"
 	@echo ""
@@ -384,17 +557,25 @@ help:
 	@echo "  doc-open       Build and open documentation"
 	@echo "  doc-private    Build docs with private items"
 	@echo ""
-	@echo "$(GREEN)Example (SSR mode - recommended):$(RESET)"
-	@echo "  example          Run the example (SSR with cargo-leptos)"
-	@echo "  example-ssr      Run the example (SSR manual)"
-	@echo "  example-build    Build the example (SSR)"
-	@echo "  example-release  Build the example (SSR, optimized)"
+	@echo "$(GREEN)Examples (Generic - use NAME=<example>):$(RESET)"
+	@echo "  examples-list        List all available examples"
+	@echo "  run                  Run example (make run NAME=token-explorer-example)"
+	@echo "  build-example        Build example (make build-example NAME=...)"
+	@echo "  build-example-release Build example in release mode"
+	@echo "  test-example-pkg     Run example tests (make test-example-pkg NAME=...)"
+	@echo "  check-example        Check example compiles (SSR + hydrate)"
+	@echo "  clean-example        Clean example artifacts"
+	@echo "  test-all-examples    Test all examples"
+	@echo "  check-all-examples   Check all examples compile"
+	@echo "  clean-all-examples   Clean all example artifacts"
 	@echo ""
-	@echo "$(GREEN)Example (CSR mode):$(RESET)"
-	@echo "  example-csr        Run the example (CSR with trunk)"
-	@echo "  example-build-csr  Build the example (CSR)"
-	@echo "  example-release-csr Build the example (CSR, optimized)"
-	@echo "  example-clean      Clean example artifacts"
+	@echo "$(GREEN)Examples (Legacy - auth-store-example):$(RESET)"
+	@echo "  example          Run auth-store-example (SSR)"
+	@echo "  example-ssr      Run auth-store-example (SSR manual)"
+	@echo "  example-csr      Run auth-store-example (CSR)"
+	@echo "  example-build    Build auth-store-example (SSR)"
+	@echo "  example-release  Build auth-store-example (SSR, release)"
+	@echo "  example-clean    Clean auth-store-example artifacts"
 	@echo ""
 	@echo "$(GREEN)Publishing:$(RESET)"
 	@echo "  publish-dry    Dry run publish"
