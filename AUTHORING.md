@@ -180,19 +180,43 @@ make watch-clippy
 
 The crate supports these feature flags:
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `ssr` | Server-side rendering support | ✅ |
-| `hydrate` | SSR hydration with state serialization | ❌ |
-| `csr` | Client-side rendering only | ❌ |
+| Flag | Description | Default | Dependencies |
+|------|-------------|---------|--------------|
+| `ssr` | Server-side rendering support | ✅ Yes | None |
+| `hydrate` | SSR hydration with state serialization | ❌ No | `serde`, `serde_json`, `web-sys`, `wasm-bindgen` |
+| `csr` | Client-side rendering only | ❌ No | None |
 
-**Note**: For full SSR applications, use `ssr` on the server and `hydrate` on the client. These features enable conditional compilation and the `HydratableStore` trait.
+#### Why is `hydrate` opt-in?
 
-Test all feature combinations:
+The `hydrate` feature adds serialization capabilities for transferring state from server to client. It's opt-in because:
+
+1. **Added dependencies**: Brings in `serde`, `serde_json`, and WASM bindings (~50KB to WASM)
+2. **Type requirements**: State types must derive `Serialize` and `Deserialize`
+3. **Not always needed**: CSR apps and simple SSR apps don't need state transfer
+
+#### When to use each feature
+
+| Your App Type | Server Features | Client Features |
+|---------------|-----------------|-----------------|
+| **CSR only** (SPA) | N/A | `csr` |
+| **SSR without hydration** | `ssr` | N/A |
+| **Full SSR with hydration** | `ssr` | `hydrate` |
+
+#### Testing all feature combinations
 
 ```bash
 make check-features
 ```
+
+This runs:
+```bash
+cargo check --no-default-features
+cargo check --features ssr
+cargo check --features hydrate
+cargo check --features csr
+```
+
+See [Understanding SSR Hydration](#understanding-ssr-hydration) for detailed architecture documentation.
 
 ---
 
@@ -320,6 +344,128 @@ fn Counter() -> impl IntoView {
 | Async Actions | ❌ | ✅ | ✅ |
 
 **Key principle: Only mutators may write state.**
+
+---
+
+## Understanding SSR Hydration
+
+### What is Hydration?
+
+In a full SSR (Server-Side Rendering) application, the server renders the initial HTML with data already populated. When the client (browser) loads this HTML, it needs to "hydrate" - meaning it attaches JavaScript interactivity to the existing HTML without re-rendering everything.
+
+**The Problem**: The server fetches data and renders HTML, but when the client JavaScript loads, it doesn't have that data. Without hydration, the client would need to re-fetch everything, causing:
+- Flash of empty content
+- Duplicate API calls
+- Poor user experience
+
+**The Solution**: Serialize the server-side state into the HTML, then deserialize it on the client.
+
+### How leptos-store Hydration Works
+
+```mermaid
+sequenceDiagram
+    participant API as External API
+    participant Server as Server (SSR)
+    participant HTML as HTML Response
+    participant Client as Client (WASM)
+    participant Store as TokenStore
+
+    Note over Server: Build with --features ssr
+    Server->>API: Fetch data
+    API-->>Server: tokens[]
+    Server->>Store: TokenStore::new_with_data(tokens)
+    Server->>Server: provide_hydrated_store(store)
+    Note over Server: Serializes state to JSON
+    Server->>HTML: Render HTML + embedded state
+
+    Note over HTML: <script id="__LEPTOS_STORE_token_store__"><br/>{"tokens":[...],"loading":false}</script>
+
+    HTML->>Client: Page loads in browser
+    Note over Client: Build with --features hydrate
+    Client->>Client: WASM loads, calls hydrate()
+    Client->>HTML: use_hydrated_store::<TokenStore>()
+    Note over Client: Finds script tag by ID<br/>Extracts JSON content
+    HTML-->>Client: JSON state data
+    Client->>Store: Deserialize into TokenStore
+    Note over Store: State restored!<br/>No flash, no re-fetch
+    Client->>Client: Component renders with data
+    Client->>API: Optional: Start polling for updates
+```
+
+**The flow in detail:**
+
+```mermaid
+flowchart LR
+    subgraph Server["Server (cargo build --features ssr)"]
+        A[Fetch Data] --> B[Create Store]
+        B --> C[provide_hydrated_store]
+        C --> D[Serialize to JSON]
+        D --> E[Embed in HTML]
+    end
+
+    subgraph HTML["HTML Response"]
+        F["&lt;script id='__LEPTOS_STORE_...'&gt;<br/>{JSON state}&lt;/script&gt;"]
+    end
+
+    subgraph Client["Client (cargo build --features hydrate)"]
+        G[WASM Loads] --> H[use_hydrated_store]
+        H --> I[Find Script Tag]
+        I --> J[Parse JSON]
+        J --> K[Create Store]
+        K --> L[Render with Data]
+    end
+
+    E --> F
+    F --> G
+```
+
+### Feature Flag Architecture
+
+The `hydrate` feature is **opt-in** because it adds dependencies and complexity only needed for SSR hydration:
+
+| Feature | Dependencies Added | Use Case |
+|---------|-------------------|----------|
+| `ssr` (default) | None | Server-side rendering without state transfer |
+| `hydrate` | `serde`, `serde_json`, `web-sys`, `wasm-bindgen` | Full SSR with client hydration |
+| `csr` | None | Client-side only apps (SPAs) |
+
+**Why opt-in?**
+- Adds ~50KB to WASM bundle (serde)
+- Requires state types to derive `Serialize`/`Deserialize`
+- Not needed for CSR-only or simple SSR apps
+
+### Cargo.toml Setup for SSR + Hydration
+
+```toml
+[package]
+name = "my-app"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+leptos = { version = "0.8", default-features = false }
+leptos-store = { version = "0.1", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+
+[features]
+default = []
+# Server build - runs on the server, renders HTML
+ssr = ["leptos/ssr", "leptos-store/ssr"]
+# Client build - compiles to WASM, hydrates in browser
+hydrate = ["leptos/hydrate", "leptos-store/hydrate"]
+```
+
+Build commands:
+```bash
+# Server binary (includes SSR rendering)
+cargo build --features ssr
+
+# Client WASM (hydrates in browser)
+cargo build --lib --target wasm32-unknown-unknown --features hydrate
+```
+
+Or use `cargo-leptos` which handles this automatically.
 
 ---
 
