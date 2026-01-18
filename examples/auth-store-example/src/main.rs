@@ -11,12 +11,24 @@ async fn main() -> std::io::Result<()> {
     use leptos::prelude::*;
     use leptos_actix::{generate_route_list, LeptosRoutes};
 
-    // Get Leptos configuration from Cargo.toml
-    let conf = get_configuration(Some("Cargo.toml")).unwrap();
+    // Set defaults for manual mode if env vars aren't set (cargo-leptos sets these)
+    // SAFETY: We're single-threaded at this point before any async work starts
+    if std::env::var("LEPTOS_OUTPUT_NAME").is_err() {
+        unsafe {
+            std::env::set_var("LEPTOS_OUTPUT_NAME", "auth-store-example");
+            std::env::set_var("LEPTOS_SITE_ROOT", "target/site");
+            std::env::set_var("LEPTOS_SITE_PKG_DIR", "pkg");
+            std::env::set_var("LEPTOS_SITE_ADDR", "127.0.0.1:3000");
+        }
+    }
+
+    let conf = get_configuration(None).expect("Failed to load Leptos configuration");
     let addr = conf.leptos_options.site_addr;
 
     println!("🚀 Auth Store Example (SSR Mode)");
     println!("   Listening on http://{}", addr);
+    println!("   Site root: {}", conf.leptos_options.site_root);
+    println!("   Output name: {}", conf.leptos_options.output_name);
 
     HttpServer::new(move || {
         let leptos_options = &conf.leptos_options;
