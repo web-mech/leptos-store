@@ -1,12 +1,13 @@
 # Counter Example
 
-A simple counter demonstrating leptos-store basics with increment and decrement functionality.
+A simple counter demonstrating leptos-store macros with increment and decrement functionality.
 
 ## Features
 
-- **State Management**: Uses `CounterStore` with reactive state
-- **Getters**: Derived values like `doubled()`, `is_positive()`, `is_negative()`
-- **Mutators**: State changes via `increment()`, `decrement()`, `reset()`
+- **State Management**: Uses `define_state!` macro for state definition
+- **Store Trait**: Uses `impl_store!` macro for read/write split pattern
+- **Getters**: Derived values using `self.state()` (ReadSignal)
+- **Mutators**: State changes using `self.state.update()` (RwSignal)
 - **SSR Support**: Server-side rendering with Actix Web
 
 ## Running
@@ -18,20 +19,53 @@ make run NAME=counter-example
 # Opens at http://127.0.0.1:3001
 ```
 
-## Store Structure
+## Macros Used
+
+### `define_state!` - State Definition
+
+```rust
+use leptos_store::define_state;
+
+define_state! {
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct CounterState {
+        pub count: i32 = 0,
+    }
+}
+```
+
+### `impl_store!` - Store Trait Implementation
+
+```rust
+use leptos_store::impl_store;
+
+#[derive(Clone)]
+pub struct CounterStore {
+    state: RwSignal<CounterState>,
+}
+
+// Implements Store trait, exposing state() -> ReadSignal
+impl_store!(CounterStore, CounterState, state);
+```
+
+## Read/Write Split Pattern
+
+The macros enforce a clean read/write split:
+
+- **Getters** use `self.state()` which returns a `ReadSignal` (from Store trait)
+- **Mutators** use `self.state.update()` which accesses the `RwSignal` directly
 
 ```rust
 impl CounterStore {
-    // Getters - derived, read-only values
-    pub fn doubled(&self) -> i32
-    pub fn is_positive(&self) -> bool
-    pub fn is_negative(&self) -> bool
+    // Getter - uses ReadSignal from Store trait
+    pub fn doubled(&self) -> i32 {
+        self.state().with(|s| s.count * 2)
+    }
 
-    // Mutators - pure, synchronous state changes
-    pub fn increment(&self)
-    pub fn decrement(&self)
-    pub fn reset(&self)
-    pub fn set_count(&self, value: i32)
+    // Mutator - uses RwSignal directly
+    pub fn increment(&self) {
+        self.state.update(|s| s.count += 1);
+    }
 }
 ```
 
