@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Mike Price
+
 //! Server entry point for the Auth Store Example
 //!
 //! This runs the SSR server with Actix Web.
