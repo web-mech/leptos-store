@@ -926,16 +926,16 @@ macro_rules! impl_store {
 ///
 ///         getters {
 ///             getter_name(this) -> ReturnType {
-///                 this.state().with(|s| s.field)
+///                 this.read(|s| s.field)
 ///             }
 ///         }
 ///
 ///         mutators {
 ///             mutator_name(this) {
-///                 this.state.update(|s| s.field = value);
+///                 this.mutate(|s| s.field = value);
 ///             }
 ///             mutator_with_params(this, param: Type) {
-///                 this.state.update(|s| s.field = param);
+///                 this.mutate(|s| s.field = param);
 ///             }
 ///         }
 ///     }
@@ -947,6 +947,10 @@ macro_rules! impl_store {
 /// Due to Rust 2024 edition macro hygiene rules, you must use `this` (or any
 /// identifier you choose) instead of `self` in getter and mutator bodies.
 /// The first parameter in each getter/mutator is bound to `&self`.
+///
+/// The macro provides two helper methods:
+/// - `this.read(|s| ...)` - Read state immutably (for getters)
+/// - `this.mutate(|s| ...)` - Update state mutably (for mutators)
 ///
 /// # Example
 ///
@@ -961,16 +965,16 @@ macro_rules! impl_store {
 ///
 ///         getters {
 ///             doubled(this) -> i32 {
-///                 this.state().with(|s| s.count * 2)
+///                 this.read(|s| s.count * 2)
 ///             }
 ///         }
 ///
 ///         mutators {
 ///             increment(this) {
-///                 this.state.update(|s| s.count += 1);
+///                 this.mutate(|s| s.count += 1);
 ///             }
 ///             set_count(this, value: i32) {
-///                 this.state.update(|s| s.count = value);
+///                 this.mutate(|s| s.count = value);
 ///             }
 ///         }
 ///     }
