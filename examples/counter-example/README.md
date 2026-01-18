@@ -1,13 +1,13 @@
 # Counter Example
 
-A simple counter demonstrating leptos-store macros with increment and decrement functionality.
+A simple counter demonstrating the leptos-store `store!` macro with increment and decrement functionality.
 
 ## Features
 
-- **State Management**: Uses `define_state!` macro for state definition
-- **Store Trait**: Uses `impl_store!` macro for read/write split pattern
-- **Getters**: Derived values using `self.state()` (ReadSignal)
-- **Mutators**: State changes using `self.state.update()` (RwSignal)
+- **Single Macro Definition**: Complete store with `store!` macro
+- **State**: Auto-generated `CounterState` with defaults
+- **Getters**: Read-only derived values with `this.read(|s| ...)`
+- **Mutators**: State changes with `this.mutate(|s| ...)`
 - **SSR Support**: Server-side rendering with Actix Web
 
 ## Running
@@ -19,54 +19,79 @@ make run NAME=counter-example
 # Opens at http://127.0.0.1:3001
 ```
 
-## Macros Used
+## The `store!` Macro
 
-### `define_state!` - State Definition
+The `store!` macro generates a complete store implementation:
 
 ```rust
-use leptos_store::define_state;
+use leptos_store::store;
 
-define_state! {
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct CounterState {
-        pub count: i32 = 0,
+store! {
+    pub CounterStore {
+        state CounterState {
+            count: i32 = 0,
+        }
+
+        getters {
+            doubled(this) -> i32 {
+                this.read(|s| s.count * 2)
+            }
+
+            is_positive(this) -> bool {
+                this.read(|s| s.count > 0)
+            }
+        }
+
+        mutators {
+            increment(this) {
+                this.mutate(|s| s.count += 1);
+            }
+
+            decrement(this) {
+                this.mutate(|s| s.count -= 1);
+            }
+
+            set_count(this, value: i32) {
+                this.mutate(|s| s.count = value);
+            }
+        }
     }
 }
 ```
 
-### `impl_store!` - Store Trait Implementation
+### Key Points
+
+- Use `this` (or any identifier) instead of `self` due to Rust 2024 macro hygiene
+- **Getters**: Use `this.read(|s| ...)` for read-only access
+- **Mutators**: Use `this.mutate(|s| ...)` for state changes
+- The macro auto-implements the `Store` trait
+
+## Generated API
+
+The macro generates:
 
 ```rust
-use leptos_store::impl_store;
+// State struct with Default
+pub struct CounterState { pub count: i32 }
 
-#[derive(Clone)]
-pub struct CounterStore {
-    state: RwSignal<CounterState>,
-}
+// Store struct
+pub struct CounterStore { ... }
 
-// Implements Store trait, exposing state() -> ReadSignal
-impl_store!(CounterStore, CounterState, state);
-```
-
-## Read/Write Split Pattern
-
-The macros enforce a clean read/write split:
-
-- **Getters** use `self.state()` which returns a `ReadSignal` (from Store trait)
-- **Mutators** use `self.state.update()` which accesses the `RwSignal` directly
-
-```rust
 impl CounterStore {
-    // Getter - uses ReadSignal from Store trait
-    pub fn doubled(&self) -> i32 {
-        self.state().with(|s| s.count * 2)
-    }
+    pub fn new() -> Self
+    pub fn with_state(state: CounterState) -> Self
 
-    // Mutator - uses RwSignal directly
-    pub fn increment(&self) {
-        self.state.update(|s| s.count += 1);
-    }
+    // Getters
+    pub fn doubled(&self) -> i32
+    pub fn is_positive(&self) -> bool
+
+    // Mutators
+    pub fn increment(&self)
+    pub fn decrement(&self)
+    pub fn set_count(&self, value: i32)
 }
+
+impl Store for CounterStore { ... }
 ```
 
 ## Usage in Components
@@ -82,6 +107,7 @@ fn Counter() -> impl IntoView {
     view! {
         <div>
             <p>"Count: " {move || store.state().get().count}</p>
+            <p>"Doubled: " {move || store.doubled()}</p>
             <button on:click=move |_| store.increment()>"+"</button>
             <button on:click=move |_| store.decrement()>"-"</button>
         </div>
