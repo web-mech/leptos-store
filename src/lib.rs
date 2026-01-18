@@ -54,13 +54,13 @@
 //!
 //! | Macro | Purpose | Feature |
 //! |-------|---------|---------|
-//! | [`define_state!`] | Define state structs with default values | - |
-//! | [`define_hydratable_state!`] | Define state with serde derives | `hydrate` |
-//! | [`define_action!`] | Define synchronous action structs | - |
-//! | [`define_async_action!`] | Define async action structs with error types | - |
-//! | [`impl_store!`] | Implement Store trait for an existing type | - |
-//! | [`impl_hydratable_store!`] | Implement HydratableStore trait | `hydrate` |
-//! | [`store!`] | Complete store definition in one macro | - |
+//! | `define_state!` | Define state structs with default values | - |
+//! | `define_hydratable_state!` | Define state with serde derives | `hydrate` |
+//! | `define_action!` | Define synchronous action structs | - |
+//! | `define_async_action!` | Define async action structs with error types | - |
+//! | `impl_store!` | Implement Store trait for an existing type | - |
+//! | `impl_hydratable_store!` | Implement HydratableStore trait | `hydrate` |
+//! | `store!` | Complete store definition in one macro | - |
 //!
 //! See the [`macros`] module for detailed documentation and examples.
 //!
@@ -79,11 +79,11 @@
 //! ```
 //!
 //! This enables:
-//! - [`HydratableStore`](hydration::HydratableStore) trait for state serialization
-//! - [`provide_hydrated_store()`](context::provide_hydrated_store) for server-side state embedding
-//! - [`use_hydrated_store()`](context::use_hydrated_store) for client-side state recovery
+//! - `HydratableStore` trait for state serialization
+//! - `provide_hydrated_store()` for server-side state embedding
+//! - `use_hydrated_store()` for client-side state recovery
 //!
-//! See the [`hydration`] module for implementation details and examples.
+//! See the `hydration` module (requires `hydrate` feature) for implementation details.
 //!
 //! ## Example
 //!
