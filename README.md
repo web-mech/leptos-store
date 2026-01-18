@@ -19,6 +19,7 @@ Leptos provides excellent primitives (signals, context, resources), but no canon
 - 🏗️ **Global, namespaced stores** - Clear domain boundaries
 - 🔒 **Predictable mutation flow** - Only mutators can write state
 - 🌐 **First-class SSR support** - Works seamlessly with server-side rendering
+- 💧 **SSR Hydration** - Automatic state serialization and hydration between server and client
 - ⚡ **Async-safe actions** - Built-in support for async operations
 - 🔧 **Compile-time enforcement** - Catch errors at compile time, not runtime
 - 📦 **Zero magic** - No hidden executors or runtime reflection
@@ -31,6 +32,23 @@ Add to your `Cargo.toml`:
 [dependencies]
 leptos-store = "0.1"
 leptos = "0.8"
+```
+
+### Feature Flags
+
+| Feature | Description |
+|---------|-------------|
+| `ssr` | Server-side rendering support (default) |
+| `hydrate` | SSR hydration with automatic state transfer |
+| `csr` | Client-side rendering only |
+
+For SSR with hydration, use different features for server and client:
+
+```toml
+# In your Cargo.toml
+[features]
+ssr = ["leptos-store/ssr", "leptos/ssr"]
+hydrate = ["leptos-store/hydrate", "leptos/hydrate"]
 ```
 
 ## Quick Start
@@ -153,13 +171,15 @@ store! {
 
 ## Available Macros
 
-| Macro | Purpose |
-|-------|---------|
-| `define_state!` | Define state structs with default values |
-| `define_action!` | Define synchronous action structs |
-| `define_async_action!` | Define async action structs with result types |
-| `impl_store!` | Implement Store trait for an existing type |
-| `store!` | Complete store definition in one macro |
+| Macro | Purpose | Feature |
+|-------|---------|---------|
+| `define_state!` | Define state structs with default values | - |
+| `define_hydratable_state!` | Define state with serde derives for hydration | `hydrate` |
+| `define_action!` | Define synchronous action structs | - |
+| `define_async_action!` | Define async action structs with result types | - |
+| `impl_store!` | Implement Store trait for an existing type | - |
+| `impl_hydratable_store!` | Implement HydratableStore trait | `hydrate` |
+| `store!` | Complete store definition in one macro | - |
 
 ### `define_state!` - State with Defaults
 
@@ -323,6 +343,80 @@ registry.register(my_store)?;
 let store = registry.get::<MyStore>();
 ```
 
+### SSR Hydration
+
+For full SSR applications, implement `HydratableStore` to enable automatic state transfer from server to client:
+
+```rust
+use leptos::prelude::*;
+use leptos_store::prelude::*;
+use serde::{Serialize, Deserialize};
+
+// State must derive Serialize and Deserialize
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TokenState {
+    pub tokens: Vec<Token>,
+    pub loading: bool,
+}
+
+#[derive(Clone)]
+pub struct TokenStore {
+    state: RwSignal<TokenState>,
+}
+
+impl Store for TokenStore {
+    type State = TokenState;
+    fn state(&self) -> ReadSignal<Self::State> {
+        self.state.read_only()
+    }
+}
+
+// Implement HydratableStore for SSR hydration
+#[cfg(feature = "hydrate")]
+impl HydratableStore for TokenStore {
+    fn serialize_state(&self) -> Result<String, StoreHydrationError> {
+        serde_json::to_string(&self.state.get())
+            .map_err(|e| StoreHydrationError::Serialization(e.to_string()))
+    }
+
+    fn from_hydrated_state(data: &str) -> Result<Self, StoreHydrationError> {
+        let state: TokenState = serde_json::from_str(data)
+            .map_err(|e| StoreHydrationError::Deserialization(e.to_string()))?;
+        Ok(Self { state: RwSignal::new(state) })
+    }
+
+    fn store_key() -> &'static str {
+        "token_store"
+    }
+}
+```
+
+Or use the `impl_hydratable_store!` macro for less boilerplate:
+
+```rust
+use leptos_store::impl_hydratable_store;
+
+impl_hydratable_store!(TokenStore, TokenState, state, "token_store");
+```
+
+**Server-side (SSR):**
+```rust
+// Provide store and render hydration script
+let store = TokenStore::new_with_data(tokens);
+let hydration_script = provide_hydrated_store(store);
+
+view! {
+    {hydration_script}
+    <App/>
+}
+```
+
+**Client-side (Hydration):**
+```rust
+// Automatically hydrate from server-rendered state
+let store = use_hydrated_store::<TokenStore>();
+```
+
 ## Design Philosophy
 
 ### Convention over Primitives
@@ -342,6 +436,38 @@ Every feature is designed with server-side rendering in mind. No hydration misma
 See the `examples/` directory for complete examples:
 
 - `auth-store-example` - User authentication flow with login/logout
+- `token-explorer-example` - **Full SSR with hydration** - Real-time Solana token explorer using Jupiter API
+
+### Running Examples
+
+```bash
+# List all available examples
+make examples-list
+
+# Run a specific example (SSR mode with cargo-leptos)
+make run NAME=auth-store-example
+make run NAME=token-explorer-example
+
+# Build an example
+make build-example NAME=token-explorer-example
+```
+
+### Token Explorer Example
+
+The `token-explorer-example` demonstrates full SSR hydration:
+
+- 🌐 Server-side data fetching from Jupiter API
+- 💧 Automatic state hydration to client
+- 🔄 Client-side polling for real-time updates
+- 🔍 Reactive filtering and sorting
+- 🎨 Beautiful token card UI
+
+```bash
+# Run the token explorer
+make run NAME=token-explorer-example
+
+# Opens at http://127.0.0.1:3005
+```
 
 ## Contributing
 
