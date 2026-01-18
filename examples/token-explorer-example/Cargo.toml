@@ -27,10 +27,10 @@ urlencoding = "2.1"
 actix-files = { version = "0.6", optional = true }
 actix-web = { version = "4", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
-reqwest = { version = "0.12", features = ["json"], optional = true }
+reqwest = { version = "0.13", features = ["json"], optional = true }
 
 # Client dependencies
-wasm-bindgen = { version = "=0.2.100", optional = true }
+wasm-bindgen = { version = "=0.2.108", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 gloo-net = { version = "0.6", optional = true }
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
