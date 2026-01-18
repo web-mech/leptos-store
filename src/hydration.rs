@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Mike Price
+
 //! Hydration support for SSR stores.
 //!
 //! This module provides utilities for serializing store state on the server
