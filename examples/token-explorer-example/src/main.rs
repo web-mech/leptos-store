@@ -1,6 +1,7 @@
 //! Server entry point for the Token Explorer Example
 //!
-//! Fetches token data from Jupiter API and renders with SSR.
+//! Fetches token data from Jupiter API on each request and renders with SSR.
+//! Client-side polling updates the data every 30 seconds.
 
 #[cfg(feature = "ssr")]
 #[actix_web::main]
@@ -26,24 +27,12 @@ async fn main() -> std::io::Result<()> {
 
     println!("🪙 Token Explorer Example (SSR Mode)");
     println!("   Listening on http://{}", addr);
-
-    // Pre-fetch tokens for SSR
-    println!("   Fetching tokens from Jupiter API...");
-    let prefetched_tokens = match fetch_tokens_server().await {
-        Ok(tokens) => {
-            println!("   ✓ Fetched {} tokens", tokens.len());
-            tokens
-        }
-        Err(e) => {
-            eprintln!("   ✗ Failed to fetch tokens: {}", e);
-            Vec::new()
-        }
-    };
+    println!("   Tokens are fetched fresh on each request");
+    println!("   Client polls every 30 seconds for updates");
 
     HttpServer::new(move || {
         let leptos_options = &conf.leptos_options;
         let site_root = leptos_options.site_root.clone();
-        let tokens = prefetched_tokens.clone();
 
         let routes = generate_route_list(App);
 
@@ -52,10 +41,14 @@ async fn main() -> std::io::Result<()> {
             .leptos_routes(routes, {
                 let leptos_options = leptos_options.clone();
                 move || {
-                    // Create store with pre-fetched tokens
-                    let store = TokenStore::with_tokens(tokens.clone());
+                    // Note: We use a resource to fetch tokens per-request
+                    // The actual fetching happens in the App component via create_resource
                     
-                    // Serialize store state for hydration (always done on SSR server)
+                    // Create an empty store - it will be populated by the resource
+                    let store = TokenStore::new();
+                    
+                    // Serialize empty store state for hydration
+                    // The client will immediately fetch fresh data
                     let hydration_data = {
                         let json = serde_json::to_string(&store.state.get_untracked())
                             .unwrap_or_default();
