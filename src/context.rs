@@ -200,9 +200,10 @@ impl<S: Store + Clone + Send + Sync> StoreProvider<S> {
     pub fn get(&self) -> S {
         self.store.clone()
     }
+}
 
-    /// Get a reference to the store.
-    pub fn as_ref(&self) -> &S {
+impl<S: Store + Clone + Send + Sync> AsRef<S> for StoreProvider<S> {
+    fn as_ref(&self) -> &S {
         &self.store
     }
 }
