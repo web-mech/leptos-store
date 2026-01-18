@@ -21,6 +21,7 @@ leptos-store = { path = "../..", default-features = false }
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+urlencoding = "2.1"
 
 # Server dependencies
 actix-files = { version = "0.6", optional = true }
