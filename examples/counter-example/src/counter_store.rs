@@ -3,20 +3,23 @@
 
 //! Counter Store
 //!
-//! This module demonstrates a simple counter store with
-//! increment and decrement actions.
+//! This module demonstrates leptos-store macros for defining
+//! a simple counter store with increment and decrement actions.
 
 use leptos::prelude::*;
-use leptos_store::prelude::*;
+use leptos_store::{define_state, impl_store, store::Store};
 
 // ============================================================================
-// State
+// State - Using define_state! macro
 // ============================================================================
 
-/// Counter state - holds the current count value.
-#[derive(Clone, Debug, Default)]
-pub struct CounterState {
-    pub count: i32,
+define_state! {
+    /// Counter state - holds the current count value.
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct CounterState {
+        /// The current count value
+        pub count: i32 = 0,
+    }
 }
 
 // ============================================================================
@@ -28,10 +31,18 @@ pub struct CounterState {
 /// This store provides:
 /// - Getters for derived values (doubled, is_positive, is_negative)
 /// - Mutators for state changes (increment, decrement, reset, set_count)
+///
+/// The store uses the read/write split pattern:
+/// - `state()` returns a `ReadSignal` for reactive reads (via Store trait)
+/// - Mutators use the internal `RwSignal` for writes
 #[derive(Clone)]
 pub struct CounterStore {
     state: RwSignal<CounterState>,
 }
+
+// Implement Store trait using the impl_store! macro
+// This enforces the read/write split by exposing only ReadSignal
+impl_store!(CounterStore, CounterState, state);
 
 impl Default for CounterStore {
     fn default() -> Self {
@@ -56,25 +67,27 @@ impl CounterStore {
 
     // ========================================================================
     // Getters - Derived, read-only values
+    // Uses self.state() which returns ReadSignal (from Store trait)
     // ========================================================================
 
     /// Get the current count doubled.
     pub fn doubled(&self) -> i32 {
-        self.state.with(|s| s.count * 2)
+        self.state().with(|s| s.count * 2)
     }
 
     /// Check if count is positive.
     pub fn is_positive(&self) -> bool {
-        self.state.with(|s| s.count > 0)
+        self.state().with(|s| s.count > 0)
     }
 
     /// Check if count is negative.
     pub fn is_negative(&self) -> bool {
-        self.state.with(|s| s.count < 0)
+        self.state().with(|s| s.count < 0)
     }
 
     // ========================================================================
     // Mutators - Pure, synchronous state changes
+    // Uses self.state (RwSignal) directly for writes
     // ========================================================================
 
     /// Increment the counter by 1.
@@ -98,14 +111,6 @@ impl CounterStore {
     }
 }
 
-impl Store for CounterStore {
-    type State = CounterState;
-
-    fn state(&self) -> ReadSignal<Self::State> {
-        self.state.read_only()
-    }
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -113,25 +118,34 @@ impl Store for CounterStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use leptos_store::store::Store;
+
+    #[test]
+    fn test_counter_state_default() {
+        // Test that define_state! generates correct defaults
+        let state = CounterState::default();
+        assert_eq!(state.count, 0);
+    }
 
     #[test]
     fn test_counter_store_creation() {
         let store = CounterStore::new();
-        assert_eq!(store.state.get().count, 0);
+        // Use Store trait's state() method - returns ReadSignal
+        assert_eq!(store.state().get().count, 0);
     }
 
     #[test]
     fn test_increment() {
         let store = CounterStore::new();
         store.increment();
-        assert_eq!(store.state.get().count, 1);
+        assert_eq!(store.state().get().count, 1);
     }
 
     #[test]
     fn test_decrement() {
         let store = CounterStore::new();
         store.decrement();
-        assert_eq!(store.state.get().count, -1);
+        assert_eq!(store.state().get().count, -1);
     }
 
     #[test]
@@ -162,6 +176,13 @@ mod tests {
         let store = CounterStore::new();
         store.set_count(100);
         store.reset();
-        assert_eq!(store.state.get().count, 0);
+        assert_eq!(store.state().get().count, 0);
+    }
+
+    #[test]
+    fn test_with_state() {
+        let state = CounterState { count: 42 };
+        let store = CounterStore::with_state(state);
+        assert_eq!(store.state().get().count, 42);
     }
 }
