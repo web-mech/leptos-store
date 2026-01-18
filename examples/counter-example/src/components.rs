@@ -48,24 +48,29 @@ fn CounterPage() -> impl IntoView {
         <div class="counter-page">
             <div class="counter-card">
                 <h1>"Counter Store Example"</h1>
-                <p class="subtitle">"Using " <code>"define_state!"</code> " and " <code>"impl_store!"</code> " macros"</p>
+                <p class="subtitle">"Using the " <code>"store!"</code> " macro"</p>
 
                 <Counter />
 
                 <div class="code-hint">
-                    <p>"Using leptos-store macros:"</p>
-                    <pre><code>{r#"// State with define_state! macro
-define_state! {
-    pub struct CounterState {
-        pub count: i32 = 0,
+                    <p>"Using the " <code>"store!"</code> " macro:"</p>
+                    <pre><code>{r#"store! {
+    pub CounterStore {
+        state CounterState {
+            count: i32 = 0,
+        }
+        getters {
+            doubled(this) -> i32 {
+                this.read(|s| s.count * 2)
+            }
+        }
+        mutators {
+            increment(this) {
+                this.mutate(|s| s.count += 1);
+            }
+        }
     }
-}
-
-// Store trait with impl_store! macro
-impl_store!(CounterStore, CounterState, state);
-
-// Getters use self.state() -> ReadSignal
-// Mutators use self.state.update() -> RwSignal"#}</code></pre>
+}"#}</code></pre>
                 </div>
             </div>
         </div>
@@ -84,7 +89,8 @@ fn Counter() -> impl IntoView {
     let store_inc = store.clone();
     let store_dec = store.clone();
     let store_reset = store.clone();
-
+    let store_prime = store.clone();
+    
     view! {
         <div class="counter">
             // Current count display
@@ -126,6 +132,10 @@ fn Counter() -> impl IntoView {
                 <div class="info-item">
                     <span class="info-label">"Doubled:"</span>
                     <span class="info-value">{move || store_doubled.doubled()}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">"Prime:"</span>
+                    <span class="info-value">{move || store_prime.is_prime()}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">"Status:"</span>
