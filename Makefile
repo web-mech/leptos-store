@@ -168,20 +168,18 @@ example-ssr: example-setup example-ssr-build-wasm
 	cd examples/auth-store-example && cargo run --features ssr
 
 ## Build WASM and assets for manual SSR mode
+## Note: Requires wasm-bindgen-cli version to match the wasm-bindgen crate (0.2.100)
 example-ssr-build-wasm:
 	@echo "$(CYAN)Building WASM for hydration...$(RESET)"
 	cd examples/auth-store-example && cargo build --lib --features hydrate --target wasm32-unknown-unknown --release
-	@echo "$(CYAN)Running wasm-bindgen...$(RESET)"
-	@command -v wasm-bindgen >/dev/null 2>&1 || cargo install wasm-bindgen-cli
+	@echo "$(CYAN)Running wasm-bindgen (requires v0.2.100)...$(RESET)"
+	@command -v wasm-bindgen >/dev/null 2>&1 || cargo install wasm-bindgen-cli --version 0.2.100
 	@mkdir -p examples/auth-store-example/target/site/pkg
 	wasm-bindgen \
 		--target web \
 		--out-dir examples/auth-store-example/target/site/pkg \
 		--out-name auth-store-example \
 		target/wasm32-unknown-unknown/release/auth_store_example.wasm
-	@echo "$(CYAN)Renaming WASM for Leptos compatibility...$(RESET)"
-	mv examples/auth-store-example/target/site/pkg/auth-store-example_bg.wasm \
-		examples/auth-store-example/target/site/pkg/auth-store-example.wasm
 	@echo "$(CYAN)Copying CSS...$(RESET)"
 	cp examples/auth-store-example/style/main.css examples/auth-store-example/target/site/pkg/auth-store-example.css
 	@echo "$(GREEN)Assets ready in target/site/pkg/$(RESET)"
