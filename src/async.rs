@@ -86,9 +86,10 @@ impl ActionError {
 pub type ActionResult<T, E = ActionError> = Result<T, E>;
 
 /// State of an async action.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ActionState {
     /// Action has not been executed yet.
+    #[default]
     Idle,
     /// Action is currently running.
     Pending,
@@ -96,12 +97,6 @@ pub enum ActionState {
     Success,
     /// Action failed with an error.
     Error,
-}
-
-impl Default for ActionState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 impl ActionState {
