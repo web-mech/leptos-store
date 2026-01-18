@@ -463,6 +463,7 @@ Every feature is designed with server-side rendering in mind. No hydration misma
 
 See the `examples/` directory for complete examples:
 
+- `counter-example` - **Simple counter** using the `store!` macro with increment/decrement
 - `auth-store-example` - User authentication flow with login/logout
 - `token-explorer-example` - **Full SSR with hydration** - Real-time Solana token explorer using Jupiter API
 
