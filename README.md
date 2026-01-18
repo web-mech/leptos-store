@@ -177,25 +177,27 @@ store! {
         }
 
         getters {
-            doubled() -> i32 {
-                self.state().with(|s| s.count * 2)
+            doubled(this) -> i32 {
+                this.read(|s| s.count * 2)
             }
         }
 
         mutators {
-            increment() {
-                self.state.update(|s| s.count += 1);
+            increment(this) {
+                this.mutate(|s| s.count += 1);
             }
-            decrement() {
-                self.state.update(|s| s.count -= 1);
+            decrement(this) {
+                this.mutate(|s| s.count -= 1);
             }
-            set_count(value: i32) {
-                self.state.update(|s| s.count = value);
+            set_count(this, value: i32) {
+                this.mutate(|s| s.count = value);
             }
         }
     }
 }
 ```
+
+> **Note**: Use `this` (or any identifier) instead of `self` in getter/mutator bodies due to Rust 2024 macro hygiene rules. The macro provides `this.read()` for getters and `this.mutate()` for mutators.
 
 ## Available Macros
 
