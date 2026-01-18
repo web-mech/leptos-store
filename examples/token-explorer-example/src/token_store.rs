@@ -481,7 +481,7 @@ pub fn build_api_url(token_ids: &[&str], limit: usize) -> String {
     format!("{}?query={}&limit={}", JUPITER_API_BASE, query, limit)
 }
 
-/// Fetch tokens from the Jupiter API (server-side)
+/// Fetch tokens from the Jupiter API (server-side internal function)
 #[cfg(feature = "ssr")]
 pub async fn fetch_tokens_server() -> Result<Vec<Token>, String> {
     let url = build_api_url(DEFAULT_TOKEN_IDS, 10);
@@ -501,6 +501,60 @@ pub async fn fetch_tokens_server() -> Result<Vec<Token>, String> {
 
     Ok(tokens)
 }
+
+// ============================================================================
+// Server Function - Callable from both server and client
+// ============================================================================
+
+/// Response from fetch_tokens server function
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FetchTokensResponse {
+    pub tokens: Vec<Token>,
+    pub fetched_at: String,
+}
+
+/// Server function to fetch tokens - can be called from client via HTTP
+#[leptos::prelude::server(FetchTokens, "/api")]
+pub async fn fetch_tokens() -> Result<FetchTokensResponse, leptos::prelude::ServerFnError> {
+    let tokens = fetch_tokens_server()
+        .await
+        .map_err(|e| leptos::prelude::ServerFnError::new(e))?;
+    
+    Ok(FetchTokensResponse {
+        tokens,
+        fetched_at: current_timestamp(),
+    })
+}
+
+/// Get current timestamp as ISO 8601 string
+#[cfg(feature = "ssr")]
+fn current_timestamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = duration.as_secs();
+    
+    // Simple UTC timestamp without full chrono dependency
+    let days_since_epoch = secs / 86400;
+    let time_of_day = secs % 86400;
+    let hours = time_of_day / 3600;
+    let minutes = (time_of_day % 3600) / 60;
+    let seconds = time_of_day % 60;
+    
+    // Approximate date calculation (good enough for display)
+    let year = 1970 + (days_since_epoch / 365);
+    let day_of_year = days_since_epoch % 365;
+    let month = (day_of_year / 30) + 1;
+    let day = (day_of_year % 30) + 1;
+    
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        year, month, day, hours, minutes, seconds
+    )
+}
+
 
 // ============================================================================
 // Tests
