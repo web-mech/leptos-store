@@ -660,15 +660,13 @@ mod tests {
         let store = TokenStore::new();
         assert_eq!(store.token_count(), 0);
 
-        let tokens = vec![
-            Token {
-                id: "action_test".to_string(),
-                name: "Action Test".to_string(),
-                symbol: "ACT".to_string(),
-                mcap: 5000.0,
-                ..Default::default()
-            },
-        ];
+        let tokens = vec![Token {
+            id: "action_test".to_string(),
+            name: "Action Test".to_string(),
+            symbol: "ACT".to_string(),
+            mcap: 5000.0,
+            ..Default::default()
+        }];
 
         // Call the public action
         store.set_tokens(tokens);
