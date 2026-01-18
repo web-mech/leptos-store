@@ -111,10 +111,6 @@ fmt-check:
 	@echo "$(CYAN)Checking code format...$(RESET)"
 	cargo fmt --all -- --check
 
-## Run all quality checks (CI pipeline)
-ci: fmt-check clippy test-all
-	@echo "$(GREEN)All CI checks passed!$(RESET)"
-
 # ============================================================================
 # Documentation
 # ============================================================================

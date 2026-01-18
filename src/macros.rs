@@ -905,6 +905,81 @@ macro_rules! impl_store {
 ///     }
 /// }
 /// ```
+/// Define a complete store with state, getters, and mutators in one macro.
+///
+/// This macro generates a complete store implementation including:
+/// - A state struct with public fields and Default implementation
+/// - A store struct with constructor methods
+/// - Store trait implementation (with read/write split)
+/// - Getter methods for derived state
+/// - Mutator methods for state changes
+///
+/// # Syntax
+///
+/// ```text
+/// store! {
+///     pub StoreName {
+///         state StateName {
+///             field1: Type1,
+///             field2: Type2 = default_value,
+///         }
+///
+///         getters {
+///             getter_name(this) -> ReturnType {
+///                 this.read(|s| s.field)
+///             }
+///         }
+///
+///         mutators {
+///             mutator_name(this) {
+///                 this.mutate(|s| s.field = value);
+///             }
+///             mutator_with_params(this, param: Type) {
+///                 this.mutate(|s| s.field = param);
+///             }
+///         }
+///     }
+/// }
+/// ```
+///
+/// # Note on `this` parameter
+///
+/// Due to Rust 2024 edition macro hygiene rules, you must use `this` (or any
+/// identifier you choose) instead of `self` in getter and mutator bodies.
+/// The first parameter in each getter/mutator is bound to `&self`.
+///
+/// The macro provides two helper methods:
+/// - `this.read(|s| ...)` - Read state immutably (for getters)
+/// - `this.mutate(|s| ...)` - Update state mutably (for mutators)
+///
+/// # Example
+///
+/// ```rust
+/// use leptos_store::store;
+///
+/// store! {
+///     pub CounterStore {
+///         state CounterState {
+///             count: i32 = 0,
+///         }
+///
+///         getters {
+///             doubled(this) -> i32 {
+///                 this.read(|s| s.count * 2)
+///             }
+///         }
+///
+///         mutators {
+///             increment(this) {
+///                 this.mutate(|s| s.count += 1);
+///             }
+///             set_count(this, value: i32) {
+///                 this.mutate(|s| s.count = value);
+///             }
+///         }
+///     }
+/// }
+/// ```
 #[macro_export]
 macro_rules! store {
     (
@@ -918,7 +993,7 @@ macro_rules! store {
             $(
                 getters {
                     $(
-                        $getter_name:ident () -> $getter_ty:ty $getter_body:block
+                        $getter_name:ident ( $getter_self:ident ) -> $getter_ty:ty $getter_body:block
                     )*
                 }
             )?
@@ -926,7 +1001,7 @@ macro_rules! store {
             $(
                 mutators {
                     $(
-                        $mutator_name:ident ( $($mutator_param:ident : $mutator_param_ty:ty),* ) $mutator_body:block
+                        $mutator_name:ident ( $mutator_self:ident $(, $mutator_param:ident : $mutator_param_ty:ty)* ) $mutator_body:block
                     )*
                 }
             )?
@@ -972,19 +1047,47 @@ macro_rules! store {
                 }
             }
 
-            // Generate getters
+            // Generate getters - use captured self identifier
+            // Note: Users should use this.get_state() for reading
             $(
                 $(
-                    pub fn $getter_name(&self) -> $getter_ty $getter_body
+                    #[allow(dead_code)]
+                    pub fn $getter_name(&self) -> $getter_ty {
+                        let $getter_self = self;
+                        $getter_body
+                    }
                 )*
             )?
 
-            // Generate mutators
+            // Generate mutators - use captured self identifier
+            // Note: Users should use this.mutate() for writing
             $(
                 $(
-                    pub fn $mutator_name(&self $(, $mutator_param: $mutator_param_ty)*) $mutator_body
+                    #[allow(dead_code)]
+                    pub fn $mutator_name(&self $(, $mutator_param: $mutator_param_ty)*) {
+                        let $mutator_self = self;
+                        $mutator_body
+                    }
                 )*
             )?
+
+            /// Read state with a closure (for getters).
+            /// Uses the With trait internally.
+            #[allow(dead_code)]
+            #[inline]
+            fn read<R>(&self, f: impl FnOnce(&$state_name) -> R) -> R {
+                use ::leptos::prelude::With;
+                self.state.with(f)
+            }
+
+            /// Update state with a closure (for mutators).
+            /// Uses the Update trait internally.
+            #[allow(dead_code)]
+            #[inline]
+            fn mutate<R>(&self, f: impl FnOnce(&mut $state_name) -> R) -> R {
+                use ::leptos::prelude::Update;
+                self.state.try_update(f).expect("signal disposed")
+            }
         }
 
         impl Default for $store_name {

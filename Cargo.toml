@@ -49,4 +49,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [workspace]
-members = [".", "examples/auth-store-example", "examples/token-explorer-example"]
+members = [".", "examples/counter-example", "examples/auth-store-example", "examples/token-explorer-example"]
