@@ -393,24 +393,85 @@ example-clean:
 	rm -rf examples/auth-store-example/dist
 	rm -rf examples/auth-store-example/target/site
 
-# ============================================================================
-# Publishing
-# ============================================================================
+#==============================================================================
+# VERSION MANAGEMENT
+#==============================================================================
 
-## Dry run publish to crates.io
-publish-dry:
-	@echo "$(CYAN)Dry run publish to crates.io...$(RESET)"
-	cargo publish --dry-run
+version: ## Show current version
+	@./scripts/get-version.sh
 
-## Publish to crates.io
-publish:
-	@echo "$(YELLOW)Publishing to crates.io...$(RESET)"
-	@echo "$(RED)Make sure you have:$(RESET)"
-	@echo "  1. Updated version in Cargo.toml"
-	@echo "  2. Updated CHANGELOG.md"
-	@echo "  3. Committed all changes"
-	@echo "  4. Created a git tag"
-	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] && cargo publish
+bump: ## Auto-bump version based on commits
+	@./scripts/bump-version.sh auto
+
+bump-major: ## Bump major version
+	@./scripts/bump-version.sh major
+
+bump-minor: ## Bump minor version
+	@./scripts/bump-version.sh minor
+
+bump-patch: ## Bump patch version
+	@./scripts/bump-version.sh patch
+
+changelog: ## Generate changelog from commits
+	@./scripts/changelog.sh
+
+#==============================================================================
+# RELEASE
+#==============================================================================
+
+release: check ## Full release: auto-bump, tag, push, publish
+	@echo "$(BLUE)Starting release process...$(RESET)"
+	@./scripts/release.sh auto
+
+release-major: check ## Release with major version bump
+	@echo "$(BLUE)Starting major release...$(RESET)"
+	@./scripts/release.sh major
+
+release-minor: check ## Release with minor version bump
+	@echo "$(BLUE)Starting minor release...$(RESET)"
+	@./scripts/release.sh minor
+
+release-patch: check ## Release with patch version bump
+	@echo "$(BLUE)Starting patch release...$(RESET)"
+	@./scripts/release.sh patch
+
+release-dry-run: ## Preview release without making changes
+	@echo "$(BLUE)Release dry run...$(RESET)"
+	@./scripts/release.sh --dry-run
+
+release-local: check ## Release locally (no push, no publish)
+	@echo "$(BLUE)Local release...$(RESET)"
+	@./scripts/release.sh --no-push --skip-publish
+
+#==============================================================================
+# PUBLISHING
+#==============================================================================
+
+publish: ## Publish to crates.io
+	@echo "$(BLUE)Publishing to crates.io...$(RESET)"
+	@./scripts/publish.sh
+
+publish-dry: ## Dry run publish to crates.io
+	@echo "$(BLUE)Publish dry run...$(RESET)"
+	@./scripts/publish.sh --dry-run
+
+#==============================================================================
+# UTILITIES
+#==============================================================================
+
+setup: ## Setup development environment
+	@echo "$(BLUE)Setting up development environment...$(RESET)"
+	@chmod +x scripts/*.sh
+	@rustup component add rustfmt clippy
+	@echo "$(GREEN)Setup complete!$(RESET)"
+
+ci: ## Run CI checks (used in GitHub Actions)
+	@echo "$(BLUE)Running CI checks...$(RESET)"
+	cargo fmt --check
+	cargo clippy -- -D warnings
+	cargo test
+	cargo doc --no-deps
+	@echo "$(GREEN)CI checks passed!$(RESET)"
 
 ## Create a new version tag
 tag:
