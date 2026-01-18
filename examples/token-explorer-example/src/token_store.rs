@@ -265,6 +265,14 @@ impl TokenStore {
     // Getters
     // ========================================================================
 
+    /// Get the full state (untracked) for serialization.
+    ///
+    /// This is used for SSR hydration serialization. It reads the state
+    /// without creating a reactive dependency.
+    pub fn get_state_untracked(&self) -> TokenState {
+        self.state.get_untracked()
+    }
+
     /// Get all tokens
     pub fn tokens(&self) -> Vec<Token> {
         self.state.with(|s| s.tokens.clone())
@@ -372,15 +380,15 @@ impl TokenStore {
     }
 
     // ========================================================================
-    // Mutators - PRIVATE
+    // Actions - PUBLIC API
     // ========================================================================
     //
-    // These methods are internal only. External code must use public Actions.
-    // This enforces the Enterprise Mode pattern.
+    // These are the public methods for modifying state.
+    // The state field is private, so external code cannot directly
+    // call state.set() - they must use these controlled actions.
 
-    /// Set tokens (PRIVATE)
-    #[allow(dead_code)]
-    fn mutate_tokens(&self, tokens: Vec<Token>) {
+    /// Update the token list after a fetch
+    pub fn set_tokens(&self, tokens: Vec<Token>) {
         self.state.update(|s| {
             s.tokens = tokens;
             s.last_fetched = Some(chrono_now());
@@ -389,97 +397,52 @@ impl TokenStore {
         });
     }
 
-    /// Set loading state (PRIVATE)
-    #[allow(dead_code)]
-    fn mutate_loading(&self, loading: bool) {
+    /// Set the loading state
+    pub fn set_loading(&self, loading: bool) {
         self.state.update(|s| s.loading = loading);
     }
 
-    /// Set error (PRIVATE)
-    #[allow(dead_code)]
-    fn mutate_error(&self, error: Option<String>) {
+    /// Set an error message
+    pub fn set_error(&self, error: Option<String>) {
         self.state.update(|s| {
             s.error = error;
             s.loading = false;
         });
     }
 
-    /// Set search query (PRIVATE)
-    fn mutate_search_query(&self, query: String) {
+    /// Update the search query
+    pub fn set_search_query(&self, query: String) {
         self.state.update(|s| s.search_query = query);
     }
 
-    /// Set sort field with toggle logic (PRIVATE)
-    #[allow(dead_code)]
-    fn mutate_sort_by(&self, field: SortField) {
+    /// Toggle sort by a field (toggles direction if same field)
+    pub fn set_sort_by(&self, field: SortField) {
         self.state.update(|s| {
             if s.sort_by == field {
-                // Toggle direction if same field
                 s.sort_desc = !s.sort_desc;
             } else {
                 s.sort_by = field;
-                s.sort_desc = true; // Default to descending for new field
+                s.sort_desc = true;
             }
         });
     }
 
-    /// Set sort field and direction directly (PRIVATE)
-    fn mutate_sort_field_direct(&self, field: SortField, desc: bool) {
+    /// Set sort field and direction directly (for URL sync)
+    pub fn set_sort_field_direct(&self, field: SortField, desc: bool) {
         self.state.update(|s| {
             s.sort_by = field;
             s.sort_desc = desc;
         });
     }
 
-    /// Set selected token ID (PRIVATE)
-    fn mutate_selected_token(&self, id: Option<String>) {
-        self.state.update(|s| s.selected_token_id = id);
-    }
-
-    // ========================================================================
-    // Actions - PUBLIC API
-    // ========================================================================
-    //
-    // These are the only methods external code should call to modify state.
-
-    /// Update the token list after a fetch
-    pub fn set_tokens(&self, tokens: Vec<Token>) {
-        self.mutate_tokens(tokens);
-    }
-
-    /// Set the loading state
-    pub fn set_loading(&self, loading: bool) {
-        self.mutate_loading(loading);
-    }
-
-    /// Set an error message
-    pub fn set_error(&self, error: Option<String>) {
-        self.mutate_error(error);
-    }
-
-    /// Update the search query
-    pub fn set_search_query(&self, query: String) {
-        self.mutate_search_query(query);
-    }
-
-    /// Toggle sort by a field (toggles direction if same field)
-    pub fn set_sort_by(&self, field: SortField) {
-        self.mutate_sort_by(field);
-    }
-
-    /// Set sort field and direction directly (for URL sync)
-    pub fn set_sort_field_direct(&self, field: SortField, desc: bool) {
-        self.mutate_sort_field_direct(field, desc);
-    }
-
     /// Select a token by ID
     pub fn select_token(&self, id: Option<String>) {
-        self.mutate_selected_token(id);
+        self.state.update(|s| s.selected_token_id = id);
     }
 
     /// Clear the token selection
     pub fn clear_selection(&self) {
-        self.mutate_selected_token(None);
+        self.state.update(|s| s.selected_token_id = None);
     }
 }
 
@@ -689,6 +652,35 @@ mod tests {
 
         let store = TokenStore::with_tokens(tokens);
         assert_eq!(store.token_count(), 2);
+    }
+
+    #[test]
+    fn test_set_tokens_action() {
+        // Test that the public set_tokens action works correctly
+        let store = TokenStore::new();
+        assert_eq!(store.token_count(), 0);
+
+        let tokens = vec![
+            Token {
+                id: "action_test".to_string(),
+                name: "Action Test".to_string(),
+                symbol: "ACT".to_string(),
+                mcap: 5000.0,
+                ..Default::default()
+            },
+        ];
+
+        // Call the public action
+        store.set_tokens(tokens);
+
+        // Verify the state was updated
+        assert_eq!(store.token_count(), 1);
+        let retrieved = store.tokens();
+        assert_eq!(retrieved[0].id, "action_test");
+        assert_eq!(retrieved[0].mcap, 5000.0);
+
+        // Verify loading was set to false
+        assert!(!store.is_loading());
     }
 
     #[test]
