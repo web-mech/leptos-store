@@ -85,6 +85,19 @@ pub enum StoreError {
 /// - `State`: The type of state this store manages. Must be `Clone` for
 ///   reactive updates and `'static` for Leptos compatibility.
 ///
+/// # Hydration Support
+///
+/// For SSR hydration support, implement the [`HydratableStore`] trait
+/// (available with the `hydrate` feature). Your state type will need
+/// to derive `serde::Serialize` and `serde::Deserialize`:
+///
+/// ```rust,ignore
+/// #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// pub struct MyState { ... }
+/// ```
+///
+/// See the [`crate::hydration`] module for details.
+///
 /// # Example
 ///
 /// ```rust
@@ -110,8 +123,15 @@ pub enum StoreError {
 ///     }
 /// }
 /// ```
+///
+/// [`HydratableStore`]: crate::hydration::HydratableStore
 pub trait Store: Clone + Send + Sync + 'static {
     /// The state type managed by this store.
+    ///
+    /// For hydration support, this type should implement `serde::Serialize`
+    /// and `serde::Deserialize` when used with [`HydratableStore`].
+    ///
+    /// [`HydratableStore`]: crate::hydration::HydratableStore
     type State: Clone + Send + Sync + 'static;
 
     /// Returns a read-only signal to the store's state.
