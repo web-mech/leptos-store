@@ -42,5 +42,11 @@ wasm-bindgen = { version = "0.2", optional = true }
 tokio = { version = "1", features = ["rt", "macros"] }
 wasm-bindgen-test = "0.3"
 
+# docs.rs configuration - build with all features to show complete API
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+
 [workspace]
 members = [".", "examples/auth-store-example", "examples/token-explorer-example"]
