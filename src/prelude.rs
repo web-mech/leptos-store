@@ -9,6 +9,17 @@
 //! let state = ActionState::Idle;
 //! assert!(state.is_idle());
 //! ```
+//!
+//! ## Hydration Support
+//!
+//! When the `hydrate` feature is enabled, additional types are available:
+//!
+//! ```rust,ignore
+//! use leptos_store::prelude::*;
+//!
+//! // HydratableStore trait, provide_hydrated_store, use_hydrated_store, etc.
+//! let store = use_hydrated_store::<MyStore>();
+//! ```
 
 // Core store traits and types
 pub use crate::store::{
@@ -24,5 +35,22 @@ pub use crate::r#async::{
     Action, ActionError, ActionFuture, ActionResult, ActionState, AsyncAction, AsyncActionBuilder,
 };
 
+// Hydration support (when feature is enabled)
+#[cfg(feature = "hydrate")]
+pub use crate::hydration::{
+    has_hydration_data, hydrate_store, hydration_script_html, hydration_script_id,
+    serialize_store_state, HydratableStore, HydrationBuilder, StoreHydrationError,
+    HYDRATION_SCRIPT_PREFIX,
+};
+
+#[cfg(feature = "hydrate")]
+pub use crate::context::{
+    provide_hydrated_store, try_use_hydrated_store, use_hydrated_store, HydratableStoreContextExt,
+};
+
 // Re-export commonly used Leptos types for convenience
 pub use leptos::prelude::{signal, RwSignal};
+
+// Re-export serde when hydrate feature is enabled (for user convenience)
+#[cfg(feature = "hydrate")]
+pub use serde::{Deserialize, Serialize};
