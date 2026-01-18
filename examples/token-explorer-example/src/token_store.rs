@@ -232,7 +232,7 @@ impl SortField {
 /// Store for managing token data with SSR hydration support
 #[derive(Clone)]
 pub struct TokenStore {
-    pub state: RwSignal<TokenState>,
+    state: RwSignal<TokenState>, // Private - access via Store::state()
 }
 
 impl TokenStore {
@@ -372,11 +372,15 @@ impl TokenStore {
     }
 
     // ========================================================================
-    // Mutators
+    // Mutators - PRIVATE
     // ========================================================================
+    //
+    // These methods are internal only. External code must use public Actions.
+    // This enforces the Enterprise Mode pattern.
 
-    /// Set tokens
-    pub fn set_tokens(&self, tokens: Vec<Token>) {
+    /// Set tokens (PRIVATE)
+    #[allow(dead_code)]
+    fn mutate_tokens(&self, tokens: Vec<Token>) {
         self.state.update(|s| {
             s.tokens = tokens;
             s.last_fetched = Some(chrono_now());
@@ -385,26 +389,29 @@ impl TokenStore {
         });
     }
 
-    /// Set loading state
-    pub fn set_loading(&self, loading: bool) {
+    /// Set loading state (PRIVATE)
+    #[allow(dead_code)]
+    fn mutate_loading(&self, loading: bool) {
         self.state.update(|s| s.loading = loading);
     }
 
-    /// Set error
-    pub fn set_error(&self, error: Option<String>) {
+    /// Set error (PRIVATE)
+    #[allow(dead_code)]
+    fn mutate_error(&self, error: Option<String>) {
         self.state.update(|s| {
             s.error = error;
             s.loading = false;
         });
     }
 
-    /// Set search query
-    pub fn set_search_query(&self, query: String) {
+    /// Set search query (PRIVATE)
+    fn mutate_search_query(&self, query: String) {
         self.state.update(|s| s.search_query = query);
     }
 
-    /// Set sort field (toggles direction if same field)
-    pub fn set_sort_by(&self, field: SortField) {
+    /// Set sort field with toggle logic (PRIVATE)
+    #[allow(dead_code)]
+    fn mutate_sort_by(&self, field: SortField) {
         self.state.update(|s| {
             if s.sort_by == field {
                 // Toggle direction if same field
@@ -416,22 +423,63 @@ impl TokenStore {
         });
     }
 
-    /// Set sort field and direction directly (for URL sync)
-    pub fn set_sort_field_direct(&self, field: SortField, desc: bool) {
+    /// Set sort field and direction directly (PRIVATE)
+    fn mutate_sort_field_direct(&self, field: SortField, desc: bool) {
         self.state.update(|s| {
             s.sort_by = field;
             s.sort_desc = desc;
         });
     }
 
-    /// Select a token by ID
-    pub fn select_token(&self, id: Option<String>) {
+    /// Set selected token ID (PRIVATE)
+    fn mutate_selected_token(&self, id: Option<String>) {
         self.state.update(|s| s.selected_token_id = id);
     }
 
-    /// Clear selection
+    // ========================================================================
+    // Actions - PUBLIC API
+    // ========================================================================
+    //
+    // These are the only methods external code should call to modify state.
+
+    /// Update the token list after a fetch
+    pub fn set_tokens(&self, tokens: Vec<Token>) {
+        self.mutate_tokens(tokens);
+    }
+
+    /// Set the loading state
+    pub fn set_loading(&self, loading: bool) {
+        self.mutate_loading(loading);
+    }
+
+    /// Set an error message
+    pub fn set_error(&self, error: Option<String>) {
+        self.mutate_error(error);
+    }
+
+    /// Update the search query
+    pub fn set_search_query(&self, query: String) {
+        self.mutate_search_query(query);
+    }
+
+    /// Toggle sort by a field (toggles direction if same field)
+    pub fn set_sort_by(&self, field: SortField) {
+        self.mutate_sort_by(field);
+    }
+
+    /// Set sort field and direction directly (for URL sync)
+    pub fn set_sort_field_direct(&self, field: SortField, desc: bool) {
+        self.mutate_sort_field_direct(field, desc);
+    }
+
+    /// Select a token by ID
+    pub fn select_token(&self, id: Option<String>) {
+        self.mutate_selected_token(id);
+    }
+
+    /// Clear the token selection
     pub fn clear_selection(&self) {
-        self.state.update(|s| s.selected_token_id = None);
+        self.mutate_selected_token(None);
     }
 }
 
