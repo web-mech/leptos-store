@@ -48,22 +48,24 @@ fn CounterPage() -> impl IntoView {
         <div class="counter-page">
             <div class="counter-card">
                 <h1>"Counter Store Example"</h1>
-                <p class="subtitle">"Simple state management with leptos-store"</p>
+                <p class="subtitle">"Using " <code>"define_state!"</code> " and " <code>"impl_store!"</code> " macros"</p>
 
                 <Counter />
 
                 <div class="code-hint">
-                    <p>"Store structure:"</p>
-                    <pre><code>{r#"impl CounterStore {
-    // Getters
-    pub fn doubled(&self) -> i32
-    pub fn is_positive(&self) -> bool
+                    <p>"Using leptos-store macros:"</p>
+                    <pre><code>{r#"// State with define_state! macro
+define_state! {
+    pub struct CounterState {
+        pub count: i32 = 0,
+    }
+}
 
-    // Mutators
-    pub fn increment(&self)
-    pub fn decrement(&self)
-    pub fn reset(&self)
-}"#}</code></pre>
+// Store trait with impl_store! macro
+impl_store!(CounterStore, CounterState, state);
+
+// Getters use self.state() -> ReadSignal
+// Mutators use self.state.update() -> RwSignal"#}</code></pre>
                 </div>
             </div>
         </div>
