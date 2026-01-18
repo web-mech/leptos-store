@@ -29,11 +29,26 @@
 //!
 //! ## Feature Flags
 //!
-//! | Feature | Description |
-//! |---------|-------------|
-//! | `ssr` | Server-side rendering support (default) |
-//! | `hydrate` | SSR hydration support with state serialization |
-//! | `csr` | Client-side rendering only |
+//! | Feature | Default | Description |
+//! |---------|---------|-------------|
+//! | `ssr` | ✅ Yes | Server-side rendering support |
+//! | `hydrate` | ❌ No | SSR hydration with automatic state serialization |
+//! | `csr` | ❌ No | Client-side rendering only |
+//!
+//! ### Choosing Features
+//!
+//! - **CSR only (SPA)**: Use `features = ["csr"]`
+//! - **SSR without hydration**: Use default features (`ssr`)
+//! - **Full SSR with hydration**: Use `ssr` on server, `hydrate` on client
+//!
+//! ### Why is `hydrate` opt-in?
+//!
+//! The `hydrate` feature adds:
+//! - `serde` and `serde_json` for state serialization
+//! - `web-sys` and `wasm-bindgen` for DOM access
+//! - Approximately 50KB to your WASM bundle
+//!
+//! If you don't need state transfer from server to client, you can skip this overhead.
 //!
 //! ## Available Macros
 //!
@@ -51,15 +66,24 @@
 //!
 //! ## Hydration Support
 //!
-//! When building SSR applications, enable the `hydrate` feature to support
-//! state transfer from server to client:
+//! When building full SSR applications where state needs to transfer from
+//! server to client, enable the `hydrate` feature:
 //!
 //! ```toml
 //! [dependencies]
-//! leptos-store = { version = "0.1", features = ["hydrate"] }
+//! leptos-store = { version = "0.1", default-features = false }
+//!
+//! [features]
+//! ssr = ["leptos-store/ssr"]
+//! hydrate = ["leptos-store/hydrate"]
 //! ```
 //!
-//! See the [`hydration`] module for details on implementing hydration.
+//! This enables:
+//! - [`HydratableStore`](hydration::HydratableStore) trait for state serialization
+//! - [`provide_hydrated_store()`](context::provide_hydrated_store) for server-side state embedding
+//! - [`use_hydrated_store()`](context::use_hydrated_store) for client-side state recovery
+//!
+//! See the [`hydration`] module for implementation details and examples.
 //!
 //! ## Example
 //!
@@ -99,6 +123,8 @@
 //! }
 //! ```
 
+// Enable doc_auto_cfg for docs.rs to show feature requirements
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![deny(unsafe_code)]
