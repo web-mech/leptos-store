@@ -36,19 +36,47 @@ leptos = "0.8"
 
 ### Feature Flags
 
-| Feature | Description |
-|---------|-------------|
-| `ssr` | Server-side rendering support (default) |
-| `hydrate` | SSR hydration with automatic state transfer |
-| `csr` | Client-side rendering only |
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `ssr` | ✅ Yes | Server-side rendering support |
+| `hydrate` | ❌ No | SSR hydration with automatic state serialization and transfer |
+| `csr` | ❌ No | Client-side rendering only (no SSR) |
 
-For SSR with hydration, use different features for server and client:
+#### Basic Usage (SSR without Hydration)
+
+The `ssr` feature is enabled by default. For basic SSR without state hydration:
 
 ```toml
-# In your Cargo.toml
+[dependencies]
+leptos-store = "0.1"
+```
+
+#### Full SSR with Hydration (Recommended for Production)
+
+For full SSR applications where state needs to transfer from server to client, enable the `hydrate` feature. This requires different features for server and client builds:
+
+```toml
+[dependencies]
+leptos-store = { version = "0.1", default-features = false }
+
 [features]
 ssr = ["leptos-store/ssr", "leptos/ssr"]
 hydrate = ["leptos-store/hydrate", "leptos/hydrate"]
+```
+
+The `hydrate` feature enables:
+- `HydratableStore` trait for state serialization
+- `provide_hydrated_store()` - Server-side state embedding
+- `use_hydrated_store()` - Client-side state recovery
+- Automatic JSON serialization via `serde`
+
+#### Client-Side Only
+
+For SPAs without server rendering:
+
+```toml
+[dependencies]
+leptos-store = { version = "0.1", default-features = false, features = ["csr"] }
 ```
 
 ## Quick Start
