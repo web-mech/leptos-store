@@ -43,6 +43,11 @@ use crate::store::{Store, StoreError};
 use leptos::prelude::*;
 use std::marker::PhantomData;
 
+#[cfg(feature = "hydrate")]
+use crate::hydration::{
+    has_hydration_data, hydrate_store, HydratableStore, StoreHydrationError,
+};
+
 /// Provide a store to the component tree via Leptos context.
 ///
 /// This function wraps the store in a way that makes it accessible
@@ -263,6 +268,194 @@ pub fn use_scoped_store<S: Store + Clone + Send + Sync + 'static, const ID: u64>
 pub fn provide_scoped_store<S: Store + Clone + Send + Sync + 'static, const ID: u64>(store: S) {
     provide_context(ScopedStoreProvider::<S, ID>::new(store));
 }
+
+// ============================================================================
+// Hydration-aware context functions
+// ============================================================================
+
+/// Provide a hydratable store to the component tree and render its hydration script.
+///
+/// This function is used during SSR to:
+/// 1. Provide the store to the component tree via context
+/// 2. Serialize the store's state to JSON
+/// 3. Render a `<script>` tag containing the serialized state
+///
+/// On the client, use [`use_hydrated_store`] to hydrate the store from this data.
+///
+/// # Type Parameters
+///
+/// - `S`: The store type. Must implement [`HydratableStore`].
+///
+/// # Returns
+///
+/// An `impl IntoView` that renders the hydration script tag.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use leptos::prelude::*;
+/// use leptos_store::prelude::*;
+///
+/// #[component]
+/// pub fn App() -> impl IntoView {
+///     let store = MyStore::new();
+///     let hydration_script = provide_hydrated_store(store);
+///
+///     view! {
+///         {hydration_script}
+///         <MainContent />
+///     }
+/// }
+/// ```
+///
+/// [`HydratableStore`]: crate::hydration::HydratableStore
+#[cfg(feature = "hydrate")]
+pub fn provide_hydrated_store<S: HydratableStore + Clone + Send + Sync + 'static>(
+    store: S,
+) -> impl IntoView {
+    use crate::hydration::hydration_script_id;
+
+    // Serialize the state before providing
+    let serialized = store.serialize_state();
+
+    // Provide the store to context
+    provide_store(store);
+
+    // Return the hydration script
+    match serialized {
+        Ok(data) => {
+            // Escape any script closing tags in the data
+            let escaped_data = data.replace("</script>", r"<\/script>");
+            leptos::html::script()
+                .id(hydration_script_id(S::store_key()))
+                .attr("type", "application/json")
+                .inner_html(escaped_data)
+                .into_any()
+        }
+        Err(e) => {
+            // Log error but don't fail rendering
+            leptos::logging::error!("Failed to serialize store for hydration: {}", e);
+            ().into_any()
+        }
+    }
+}
+
+/// Access a hydratable store, hydrating from serialized data if available.
+///
+/// This function is used on the client during hydration to:
+/// 1. Check if hydration data exists in the DOM
+/// 2. If yes, deserialize and create the store from that data
+/// 3. If no, fall back to the regular context lookup
+///
+/// # Type Parameters
+///
+/// - `S`: The store type. Must implement [`HydratableStore`].
+///
+/// # Panics
+///
+/// Panics if:
+/// - Hydration fails and no store was provided via `provide_store`
+/// - The store was not found in context at all
+///
+/// Use [`try_use_hydrated_store`] for a non-panicking alternative.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use leptos::prelude::*;
+/// use leptos_store::prelude::*;
+///
+/// #[component]
+/// fn Counter() -> impl IntoView {
+///     let store = use_hydrated_store::<CounterStore>();
+///     view! { <span>{move || store.state().get().count}</span> }
+/// }
+/// ```
+///
+/// [`HydratableStore`]: crate::hydration::HydratableStore
+#[cfg(feature = "hydrate")]
+pub fn use_hydrated_store<S: HydratableStore + Clone + Send + Sync + 'static>() -> S {
+    // First, try to hydrate from DOM
+    if has_hydration_data(S::store_key()) {
+        match hydrate_store::<S>() {
+            Ok(store) => {
+                // Provide the hydrated store to context for subsequent uses
+                provide_store(store.clone());
+                return store;
+            }
+            Err(e) => {
+                leptos::logging::warn!("Hydration failed, falling back to context: {}", e);
+            }
+        }
+    }
+
+    // Fall back to regular context lookup
+    use_store::<S>()
+}
+
+/// Try to access a hydratable store, hydrating from serialized data if available.
+///
+/// This is a non-panicking alternative to [`use_hydrated_store`].
+///
+/// # Returns
+///
+/// - `Ok(store)` if the store was successfully hydrated or found in context
+/// - `Err(StoreHydrationError)` if hydration failed and store not in context
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use leptos::prelude::*;
+/// use leptos_store::prelude::*;
+///
+/// #[component]
+/// fn MaybeCounter() -> impl IntoView {
+///     match try_use_hydrated_store::<CounterStore>() {
+///         Ok(store) => view! { <span>{move || store.state().get().count}</span> }.into_any(),
+///         Err(_) => view! { <span>"No counter"</span> }.into_any(),
+///     }
+/// }
+/// ```
+///
+/// [`HydratableStore`]: crate::hydration::HydratableStore
+#[cfg(feature = "hydrate")]
+pub fn try_use_hydrated_store<S: HydratableStore + Clone + Send + Sync + 'static>(
+) -> Result<S, StoreHydrationError> {
+    // First, try to hydrate from DOM
+    if has_hydration_data(S::store_key()) {
+        match hydrate_store::<S>() {
+            Ok(store) => {
+                // Provide the hydrated store to context for subsequent uses
+                provide_store(store.clone());
+                return Ok(store);
+            }
+            Err(e) => {
+                leptos::logging::warn!("Hydration failed: {}", e);
+                // Fall through to context lookup
+            }
+        }
+    }
+
+    // Fall back to regular context lookup
+    try_use_store::<S>().map_err(|e| StoreHydrationError::NotFound(e.to_string()))
+}
+
+/// Extension trait for hydratable stores to integrate with context.
+#[cfg(feature = "hydrate")]
+pub trait HydratableStoreContextExt: HydratableStore + Sized {
+    /// Provide this store with hydration support.
+    ///
+    /// Returns a view that renders the hydration script.
+    fn provide_hydrated(self) -> impl IntoView
+    where
+        Self: Clone + 'static,
+    {
+        provide_hydrated_store(self)
+    }
+}
+
+#[cfg(feature = "hydrate")]
+impl<S: HydratableStore> HydratableStoreContextExt for S {}
 
 #[cfg(test)]
 mod tests {
