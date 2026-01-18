@@ -296,7 +296,7 @@ fn TokenExplorer() -> impl IntoView {
                     set_last_updated.set(response.fetched_at);
                 }
                 Err(e) => {
-                    store.set_error(Some(format!("Refresh failed: {}", e)));
+                    store.set_error(Some(format!("Refresh failed: {e}")));
                 }
             }
             set_is_refreshing.set(false);
@@ -313,7 +313,7 @@ fn TokenExplorer() -> impl IntoView {
             let current_url = last_url.get_untracked();
             if query != current_url {
                 set_last_url.set(query.clone());
-                let path = format!("/{}", query);
+                let path = format!("/{query}");
                 navigate(
                     &path,
                     NavigateOptions {
@@ -709,7 +709,7 @@ fn TokenCard(token: Token) -> impl IntoView {
                     class:negative=!is_positive_24h
                 >
                     {if is_positive_24h { "+" } else { "" }}
-                    {format!("{:.2}%", price_change_24h)}
+                    {format!("{price_change_24h:.2}%")}
                 </span>
             </div>
 
@@ -734,7 +734,7 @@ fn TokenCard(token: Token) -> impl IntoView {
                         class:negative=!is_positive_1h
                     >
                         {if is_positive_1h { "+" } else { "" }}
-                        {format!("{:.2}%", price_change_1h)}
+                        {format!("{price_change_1h:.2}%")}
                     </span>
                 </div>
             </div>
