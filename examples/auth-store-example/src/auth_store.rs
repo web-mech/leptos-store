@@ -2,9 +2,16 @@
 //!
 //! This module defines the authentication store with all its
 //! state, getters, mutators, and actions.
+//!
+//! # Hydration Support
+//!
+//! This store supports SSR hydration when the `hydrate` feature is enabled.
+//! The state types derive `Serialize` and `Deserialize` for state transfer
+//! between server and client.
 
 use leptos::prelude::*;
 use leptos_store::prelude::*;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // ============================================================================
@@ -12,7 +19,7 @@ use thiserror::Error;
 // ============================================================================
 
 /// Represents a logged-in user.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
     pub email: String,
@@ -21,7 +28,10 @@ pub struct User {
 }
 
 /// Authentication token.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// Note: In a real application, you might want to use `#[serde(skip)]`
+/// on sensitive fields or not serialize tokens at all.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AuthToken {
     pub access_token: String,
     pub refresh_token: Option<String>,
@@ -29,9 +39,12 @@ pub struct AuthToken {
 }
 
 /// Login credentials.
-#[derive(Clone, Debug)]
+///
+/// Note: Password is skipped during serialization for security.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LoginCredentials {
     pub email: String,
+    #[serde(skip)]
     pub password: String,
     pub remember_me: bool,
 }
@@ -49,7 +62,7 @@ pub struct RegistrationData {
 // ============================================================================
 
 /// Authentication errors.
-#[derive(Debug, Error, Clone, PartialEq)]
+#[derive(Debug, Error, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuthError {
     #[error("Invalid credentials")]
     InvalidCredentials,
@@ -78,7 +91,10 @@ pub enum AuthError {
 // ============================================================================
 
 /// Authentication state.
-#[derive(Clone, Debug, Default)]
+///
+/// This state is serializable for SSR hydration support.
+/// Note: `loading` is skipped during serialization as it's transient state.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AuthState {
     /// Current user (None if not logged in).
     pub user: Option<User>,
@@ -87,9 +103,13 @@ pub struct AuthState {
     pub token: Option<AuthToken>,
 
     /// Whether authentication is in progress.
+    /// Skipped during hydration - always starts as false on client.
+    #[serde(skip)]
     pub loading: bool,
 
     /// Last error that occurred.
+    /// Skipped during hydration - errors should be re-triggered if needed.
+    #[serde(skip)]
     pub error: Option<AuthError>,
 
     /// Whether "remember me" is enabled.
@@ -191,7 +211,8 @@ impl AuthStore {
 
     /// Get user's email if logged in.
     pub fn user_email(&self) -> Option<String> {
-        self.state.with(|s| s.user.as_ref().map(|u| u.email.clone()))
+        self.state
+            .with(|s| s.user.as_ref().map(|u| u.email.clone()))
     }
 
     /// Get user's initials for avatar placeholder.
@@ -296,9 +317,7 @@ impl AuthStore {
 
         // Validate credentials
         if credentials.email.is_empty() {
-            self.set_error(Some(AuthError::Validation(
-                "Email is required".to_string(),
-            )));
+            self.set_error(Some(AuthError::Validation("Email is required".to_string())));
             self.set_loading(false);
             return;
         }
@@ -361,6 +380,39 @@ impl Store for AuthStore {
 
     fn state(&self) -> ReadSignal<Self::State> {
         self.state.read_only()
+    }
+}
+
+// ============================================================================
+// Hydration Support
+// ============================================================================
+
+/// Implement HydratableStore for SSR hydration support.
+///
+/// This allows the AuthStore to:
+/// - Serialize its state on the server
+/// - Deserialize and restore state on the client during hydration
+#[cfg(feature = "hydrate")]
+impl leptos_store::hydration::HydratableStore for AuthStore {
+    fn serialize_state(&self) -> Result<String, leptos_store::hydration::StoreHydrationError> {
+        // Use get_untracked() since we're intentionally reading outside reactive context
+        // during serialization for SSR hydration
+        let state = self.state.get_untracked();
+        serde_json::to_string(&state)
+            .map_err(|e| leptos_store::hydration::StoreHydrationError::Serialization(e.to_string()))
+    }
+
+    fn from_hydrated_state(
+        data: &str,
+    ) -> Result<Self, leptos_store::hydration::StoreHydrationError> {
+        let state: AuthState = serde_json::from_str(data).map_err(|e| {
+            leptos_store::hydration::StoreHydrationError::Deserialization(e.to_string())
+        })?;
+        Ok(Self::with_state(state))
+    }
+
+    fn store_key() -> &'static str {
+        "auth_store"
     }
 }
 
@@ -555,7 +607,10 @@ mod tests {
 
     #[test]
     fn test_auth_error_display() {
-        assert_eq!(AuthError::InvalidCredentials.to_string(), "Invalid credentials");
+        assert_eq!(
+            AuthError::InvalidCredentials.to_string(),
+            "Invalid credentials"
+        );
         assert_eq!(AuthError::UserNotFound.to_string(), "User not found");
         assert_eq!(AuthError::EmailExists.to_string(), "Email already exists");
         assert_eq!(AuthError::TokenExpired.to_string(), "Token expired");
@@ -563,5 +618,368 @@ mod tests {
             AuthError::Network("Connection failed".to_string()).to_string(),
             "Network error: Connection failed"
         );
+    }
+
+    // ========================================================================
+    // Serialization Tests (for hydration support)
+    // ========================================================================
+
+    #[test]
+    fn test_user_serialization_roundtrip() {
+        let user = User {
+            id: "user_123".to_string(),
+            email: "test@example.com".to_string(),
+            name: "John Doe".to_string(),
+            avatar_url: Some("https://example.com/avatar.png".to_string()),
+        };
+
+        // Serialize
+        let json = serde_json::to_string(&user).unwrap();
+        assert!(json.contains("user_123"));
+        assert!(json.contains("test@example.com"));
+
+        // Deserialize
+        let restored: User = serde_json::from_str(&json).unwrap();
+        assert_eq!(user, restored);
+    }
+
+    #[test]
+    fn test_auth_token_serialization_roundtrip() {
+        let token = AuthToken {
+            access_token: "abc123".to_string(),
+            refresh_token: Some("refresh_xyz".to_string()),
+            expires_at: 3600,
+        };
+
+        let json = serde_json::to_string(&token).unwrap();
+        let restored: AuthToken = serde_json::from_str(&json).unwrap();
+        assert_eq!(token, restored);
+    }
+
+    #[test]
+    fn test_auth_state_serialization_roundtrip() {
+        let state = AuthState {
+            user: Some(User {
+                id: "1".to_string(),
+                email: "user@test.com".to_string(),
+                name: "Test User".to_string(),
+                avatar_url: None,
+            }),
+            token: Some(AuthToken {
+                access_token: "token123".to_string(),
+                refresh_token: None,
+                expires_at: 7200,
+            }),
+            loading: true,                              // Should be skipped
+            error: Some(AuthError::InvalidCredentials), // Should be skipped
+            remember_me: true,
+        };
+
+        let json = serde_json::to_string(&state).unwrap();
+
+        // Verify skipped fields are not in JSON
+        assert!(!json.contains("loading"));
+        assert!(!json.contains("error"));
+
+        // Verify included fields are present
+        assert!(json.contains("user"));
+        assert!(json.contains("remember_me"));
+
+        // Deserialize
+        let restored: AuthState = serde_json::from_str(&json).unwrap();
+
+        // User and token should match
+        assert_eq!(state.user, restored.user);
+        assert_eq!(state.token, restored.token);
+        assert_eq!(state.remember_me, restored.remember_me);
+
+        // Skipped fields should be default
+        assert!(!restored.loading); // default is false
+        assert!(restored.error.is_none()); // default is None
+    }
+
+    #[test]
+    fn test_auth_state_default_values_on_deser() {
+        // Minimal JSON with only required fields
+        let json = r#"{"user":null,"token":null,"remember_me":false}"#;
+
+        let state: AuthState = serde_json::from_str(json).unwrap();
+
+        assert!(state.user.is_none());
+        assert!(state.token.is_none());
+        assert!(!state.loading);
+        assert!(state.error.is_none());
+        assert!(!state.remember_me);
+    }
+
+    #[test]
+    fn test_auth_error_serialization() {
+        let errors = vec![
+            AuthError::InvalidCredentials,
+            AuthError::UserNotFound,
+            AuthError::EmailExists,
+            AuthError::TokenExpired,
+            AuthError::Network("connection refused".to_string()),
+            AuthError::Validation("email required".to_string()),
+            AuthError::Unknown("something went wrong".to_string()),
+        ];
+
+        for error in errors {
+            let json = serde_json::to_string(&error).unwrap();
+            let restored: AuthError = serde_json::from_str(&json).unwrap();
+            assert_eq!(error, restored);
+        }
+    }
+
+    #[test]
+    fn test_login_credentials_password_skipped() {
+        let creds = LoginCredentials {
+            email: "user@test.com".to_string(),
+            password: "super_secret_password".to_string(),
+            remember_me: true,
+        };
+
+        let json = serde_json::to_string(&creds).unwrap();
+
+        // Password should NOT be in the JSON (security)
+        assert!(!json.contains("super_secret_password"));
+        assert!(!json.contains("password"));
+
+        // Email and remember_me should be present
+        assert!(json.contains("user@test.com"));
+        assert!(json.contains("remember_me"));
+    }
+
+    // ========================================================================
+    // Hydration Integration Tests
+    // ========================================================================
+    // These tests prove that the AuthStore can be serialized on the server
+    // and deserialized on the client during SSR hydration.
+
+    #[cfg(feature = "hydrate")]
+    mod hydration_tests {
+        use super::*;
+        use leptos_store::hydration::{
+            HydratableStore, hydration_script_html, hydration_script_id,
+        };
+
+        #[test]
+        fn test_auth_store_hydration_key() {
+            assert_eq!(AuthStore::store_key(), "auth_store");
+        }
+
+        #[test]
+        fn test_auth_store_serialization() {
+            // Create store with authenticated user
+            let store = AuthStore::new();
+            store.set_authenticated(
+                User {
+                    id: "user_456".to_string(),
+                    email: "hydration@test.com".to_string(),
+                    name: "Hydration Tester".to_string(),
+                    avatar_url: Some("https://example.com/avatar.jpg".to_string()),
+                },
+                AuthToken {
+                    access_token: "hydration_token_xyz".to_string(),
+                    refresh_token: Some("refresh_abc".to_string()),
+                    expires_at: 7200,
+                },
+            );
+            store.set_remember_me(true);
+
+            // Serialize the store
+            let json = store.serialize_state().expect("Serialization should work");
+
+            // Verify JSON contains the important data
+            assert!(json.contains("user_456"));
+            assert!(json.contains("hydration@test.com"));
+            assert!(json.contains("Hydration Tester"));
+            assert!(json.contains("hydration_token_xyz"));
+            assert!(json.contains("remember_me"));
+
+            // Verify transient fields are NOT in JSON
+            assert!(!json.contains("loading"));
+            assert!(!json.contains("error"));
+        }
+
+        #[test]
+        fn test_auth_store_deserialization() {
+            // Simulate JSON that would come from the server
+            let server_json = r#"{
+                "user": {
+                    "id": "server_user_1",
+                    "email": "server@example.com",
+                    "name": "Server User",
+                    "avatar_url": null
+                },
+                "token": {
+                    "access_token": "server_token_123",
+                    "refresh_token": null,
+                    "expires_at": 3600
+                },
+                "remember_me": true
+            }"#;
+
+            // Deserialize into a new store (simulating client hydration)
+            let hydrated_store =
+                AuthStore::from_hydrated_state(server_json).expect("Hydration should succeed");
+
+            // Verify the state was correctly restored
+            assert!(hydrated_store.is_authenticated());
+            assert_eq!(
+                hydrated_store.user_email(),
+                Some("server@example.com".to_string())
+            );
+            assert_eq!(hydrated_store.display_name(), "Server User");
+
+            // Transient fields should be at default values
+            assert!(!hydrated_store.is_loading());
+            assert!(!hydrated_store.has_error());
+        }
+
+        #[test]
+        fn test_auth_store_full_roundtrip() {
+            // === SERVER SIDE ===
+            // Create and populate a store on the "server"
+            let server_store = AuthStore::new();
+            server_store.set_authenticated(
+                User {
+                    id: "roundtrip_user".to_string(),
+                    email: "roundtrip@test.com".to_string(),
+                    name: "Roundtrip Test".to_string(),
+                    avatar_url: None,
+                },
+                AuthToken {
+                    access_token: "roundtrip_token".to_string(),
+                    refresh_token: Some("roundtrip_refresh".to_string()),
+                    expires_at: 86400,
+                },
+            );
+            server_store.set_remember_me(true);
+
+            // Set some transient state that should NOT be hydrated
+            server_store.set_loading(true);
+            server_store.set_error(Some(AuthError::Network("test error".to_string())));
+
+            // Serialize for transfer to client
+            let serialized = server_store
+                .serialize_state()
+                .expect("Server serialization should succeed");
+
+            // === CLIENT SIDE ===
+            // Deserialize on the "client"
+            let client_store = AuthStore::from_hydrated_state(&serialized)
+                .expect("Client hydration should succeed");
+
+            // Verify important state was transferred
+            assert!(client_store.is_authenticated());
+            assert_eq!(
+                client_store.user_email(),
+                Some("roundtrip@test.com".to_string())
+            );
+            assert_eq!(client_store.display_name(), "Roundtrip Test");
+
+            let user = client_store.current_user().expect("Should have user");
+            assert_eq!(user.id, "roundtrip_user");
+
+            // Verify transient state was NOT transferred (reset to defaults)
+            assert!(!client_store.is_loading()); // Should be false, not true
+            assert!(!client_store.has_error()); // Should be None, not Some(...)
+        }
+
+        #[test]
+        fn test_auth_store_hydration_html_generation() {
+            let store = AuthStore::new();
+            store.set_user(Some(User {
+                id: "html_test".to_string(),
+                email: "html@test.com".to_string(),
+                name: "HTML Test".to_string(),
+                avatar_url: None,
+            }));
+
+            let serialized = store.serialize_state().unwrap();
+            let html = hydration_script_html(AuthStore::store_key(), &serialized);
+
+            // Verify HTML structure
+            assert!(html.starts_with("<script"));
+            assert!(html.ends_with("</script>"));
+            assert!(html.contains(&hydration_script_id(AuthStore::store_key())));
+            assert!(html.contains("application/json"));
+
+            // Verify the data is embedded
+            assert!(html.contains("html_test"));
+            assert!(html.contains("html@test.com"));
+        }
+
+        #[test]
+        fn test_auth_store_unauthenticated_roundtrip() {
+            // Test that unauthenticated state roundtrips correctly
+            let server_store = AuthStore::new();
+            assert!(!server_store.is_authenticated());
+
+            let serialized = server_store.serialize_state().unwrap();
+            let client_store = AuthStore::from_hydrated_state(&serialized).unwrap();
+
+            assert!(!client_store.is_authenticated());
+            assert!(client_store.current_user().is_none());
+            assert_eq!(client_store.display_name(), "Guest");
+        }
+
+        #[test]
+        fn test_hydration_preserves_avatar_url() {
+            let avatar = "https://cdn.example.com/avatars/user123.png?size=200&format=webp";
+
+            let server_store = AuthStore::new();
+            server_store.set_user(Some(User {
+                id: "avatar_user".to_string(),
+                email: "avatar@test.com".to_string(),
+                name: "Avatar User".to_string(),
+                avatar_url: Some(avatar.to_string()),
+            }));
+
+            let serialized = server_store.serialize_state().unwrap();
+            let client_store = AuthStore::from_hydrated_state(&serialized).unwrap();
+
+            let user = client_store.current_user().unwrap();
+            assert_eq!(user.avatar_url, Some(avatar.to_string()));
+        }
+
+        #[test]
+        fn test_hydration_with_special_characters() {
+            // Test that special characters in user data are handled correctly
+            let server_store = AuthStore::new();
+            server_store.set_user(Some(User {
+                id: "special_<user>".to_string(),
+                email: "test+special@example.com".to_string(),
+                name: r#"Test "User" <Name>"#.to_string(),
+                avatar_url: Some("https://example.com/avatar?name=<test>&id=123".to_string()),
+            }));
+
+            let serialized = server_store.serialize_state().unwrap();
+            let client_store = AuthStore::from_hydrated_state(&serialized).unwrap();
+
+            let user = client_store.current_user().unwrap();
+            assert_eq!(user.id, "special_<user>");
+            assert_eq!(user.name, r#"Test "User" <Name>"#);
+        }
+
+        #[test]
+        fn test_hydration_error_on_invalid_json() {
+            let result = AuthStore::from_hydrated_state("not valid json");
+            assert!(result.is_err());
+
+            match result {
+                Err(leptos_store::hydration::StoreHydrationError::Deserialization(msg)) => {
+                    assert!(!msg.is_empty());
+                }
+                _ => panic!("Expected Deserialization error"),
+            }
+        }
+
+        #[test]
+        fn test_hydration_error_on_wrong_structure() {
+            let result = AuthStore::from_hydrated_state(r#"{"completely":"wrong"}"#);
+            assert!(result.is_err());
+        }
     }
 }

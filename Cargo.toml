@@ -2,7 +2,7 @@
 name = "leptos-store"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.92"
 license = "MIT OR Apache-2.0"
 description = "Enterprise-grade, type-enforced state management for Leptos"
 repository = "https://github.com/web-mech/leptos-store"
@@ -25,7 +25,7 @@ include = [
 [features]
 default = ["ssr"]
 ssr = []
-hydrate = []
+hydrate = ["dep:serde", "dep:serde_json", "dep:web-sys", "dep:wasm-bindgen"]
 csr = []
 
 [dependencies]
@@ -33,10 +33,14 @@ leptos = { version = "0.8", default-features = false }
 thiserror = "2.0"
 futures = "0.3"
 pin-project-lite = "0.2"
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlScriptElement"], optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
 wasm-bindgen-test = "0.3"
 
 [workspace]
-members = [".", "examples/auth-store-example"]
+members = [".", "examples/auth-store-example", "examples/token-explorer-example"]

@@ -5,13 +5,15 @@
 //!
 //! # Available Macros
 //!
-//! | Macro | Purpose |
-//! |-------|---------|
-//! | [`define_state!`] | Define state structs with default values |
-//! | [`define_action!`] | Define synchronous action structs |
-//! | [`define_async_action!`] | Define async action structs with error types |
-//! | [`impl_store!`] | Implement Store trait for a type |
-//! | [`store!`] | Complete store definition in one macro |
+//! | Macro | Purpose | Feature |
+//! |-------|---------|---------|
+//! | [`define_state!`] | Define state structs with default values | - |
+//! | [`define_hydratable_state!`] | Define state with serde derives for hydration | `hydrate` |
+//! | [`define_action!`] | Define synchronous action structs | - |
+//! | [`define_async_action!`] | Define async action structs with error types | - |
+//! | [`impl_store!`] | Implement Store trait for a type | - |
+//! | [`impl_hydratable_store!`] | Implement HydratableStore trait | `hydrate` |
+//! | [`store!`] | Complete store definition in one macro | - |
 //!
 //! # Quick Start
 //!
@@ -203,6 +205,184 @@ macro_rules! define_state {
 
     // Default value helper - use Default trait
     (@default $ty:ty) => { <$ty as Default>::default() };
+}
+
+// ============================================================================
+// define_hydratable_state! macro (hydrate feature)
+// ============================================================================
+
+/// Define a hydratable state struct with serde derives.
+///
+/// This macro is similar to [`define_state!`] but automatically adds
+/// `serde::Serialize` and `serde::Deserialize` derives for hydration support.
+///
+/// This macro is only available when the `hydrate` feature is enabled.
+///
+/// # Syntax
+///
+/// ```text
+/// define_hydratable_state! {
+///     #[derive(...)]           // Optional: additional derive macros
+///     pub struct StateName {   // Visibility and name
+///         field1: Type1,       // Uses Type1::default()
+///         field2: Type2 = val, // Uses explicit value
+///     }
+/// }
+/// ```
+///
+/// # Note on Serde Attributes
+///
+/// You can use serde attributes to customize serialization:
+///
+/// ```rust,ignore
+/// define_hydratable_state! {
+///     #[derive(Clone, Debug)]
+///     pub struct SessionState {
+///         user_id: String,
+///         #[serde(skip)]  // Don't serialize sensitive data
+///         password_hash: String,
+///         #[serde(default)]  // Use default if missing during deser
+///         remember_me: bool = false,
+///     }
+/// }
+/// ```
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use leptos_store::define_hydratable_state;
+///
+/// define_hydratable_state! {
+///     #[derive(Clone, Debug, PartialEq)]
+///     pub struct CounterState {
+///         count: i32 = 0,
+///         step: i32 = 1,
+///     }
+/// }
+///
+/// let state = CounterState::default();
+/// assert_eq!(state.count, 0);
+///
+/// // Serialize to JSON
+/// let json = serde_json::to_string(&state).unwrap();
+/// assert!(json.contains("\"count\":0"));
+///
+/// // Deserialize from JSON
+/// let restored: CounterState = serde_json::from_str(&json).unwrap();
+/// assert_eq!(restored.count, 0);
+/// ```
+#[cfg(feature = "hydrate")]
+#[macro_export]
+macro_rules! define_hydratable_state {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident {
+            $(
+                $(#[$field_meta:meta])*
+                $field_vis:vis $field:ident : $ty:ty $(= $default:expr)?
+            ),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(::serde::Serialize, ::serde::Deserialize)]
+        $vis struct $name {
+            $(
+                $(#[$field_meta])*
+                $field_vis $field: $ty,
+            )*
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self {
+                    $(
+                        $field: $crate::define_hydratable_state!(@default $ty $(, $default)?),
+                    )*
+                }
+            }
+        }
+    };
+
+    // Default value helper - with explicit default
+    (@default $ty:ty, $default:expr) => { $default };
+
+    // Default value helper - use Default trait
+    (@default $ty:ty) => { <$ty as Default>::default() };
+}
+
+/// Implement the HydratableStore trait for a store type.
+///
+/// This macro provides a quick way to implement the [`HydratableStore`](crate::hydration::HydratableStore)
+/// trait for a store that:
+/// - Already implements [`Store`](crate::store::Store)
+/// - Has a state type that implements `serde::Serialize` and `serde::DeserializeOwned`
+///
+/// # Syntax
+///
+/// ```text
+/// impl_hydratable_store!(StoreName, "store_key");
+/// ```
+///
+/// # Arguments
+///
+/// - `StoreName` - The store type to implement HydratableStore for
+/// - `"store_key"` - A unique string key for this store (used in DOM)
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use leptos::prelude::*;
+/// use leptos_store::{impl_store, impl_hydratable_store};
+/// use serde::{Serialize, Deserialize};
+///
+/// #[derive(Clone, Default, Serialize, Deserialize)]
+/// struct CounterState {
+///     count: i32,
+/// }
+///
+/// #[derive(Clone)]
+/// struct CounterStore {
+///     state: RwSignal<CounterState>,
+/// }
+///
+/// impl CounterStore {
+///     pub fn new() -> Self {
+///         Self { state: RwSignal::new(CounterState::default()) }
+///     }
+/// }
+///
+/// impl_store!(CounterStore, CounterState, state);
+/// impl_hydratable_store!(CounterStore, "counter");
+/// ```
+#[cfg(feature = "hydrate")]
+#[macro_export]
+macro_rules! impl_hydratable_store {
+    ($store:ty, $key:literal) => {
+        impl $crate::hydration::HydratableStore for $store {
+            fn serialize_state(&self) -> Result<String, $crate::hydration::StoreHydrationError> {
+                let state = self.state.get();
+                ::serde_json::to_string(&state).map_err(|e| {
+                    $crate::hydration::StoreHydrationError::Serialization(e.to_string())
+                })
+            }
+
+            fn from_hydrated_state(
+                data: &str,
+            ) -> Result<Self, $crate::hydration::StoreHydrationError> {
+                let state: <Self as $crate::store::Store>::State = ::serde_json::from_str(data)
+                    .map_err(|e| {
+                        $crate::hydration::StoreHydrationError::Deserialization(e.to_string())
+                    })?;
+                Ok(Self {
+                    state: ::leptos::prelude::RwSignal::new(state),
+                })
+            }
+
+            fn store_key() -> &'static str {
+                $key
+            }
+        }
+    };
 }
 
 // ============================================================================
@@ -782,6 +962,7 @@ macro_rules! store {
             }
 
             /// Create a new store with custom initial state.
+            #[allow(dead_code)]
             pub fn with_state(state: $state_name) -> Self {
                 Self {
                     state: ::leptos::prelude::RwSignal::new(state),
@@ -879,8 +1060,8 @@ macro_rules! define_mutator {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use leptos::prelude::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_define_state_basic() {
@@ -947,6 +1128,7 @@ mod tests {
         use std::fmt;
 
         #[derive(Debug)]
+        #[allow(dead_code)]
         struct TestError(String);
         impl fmt::Display for TestError {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

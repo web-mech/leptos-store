@@ -4,9 +4,18 @@
 //! how to use the AuthStore in a real application.
 //!
 //! Supports SSR (Server-Side Rendering), hydration, and CSR modes.
+//!
+//! # Hydration Support
+//!
+//! When the `hydrate` feature is enabled, this example demonstrates:
+//! - Server-side state serialization with `provide_hydrated_store`
+//! - Client-side state restoration with `use_hydrated_store`
+//!
+//! The store state is automatically transferred from server to client,
+//! ensuring no hydration mismatches.
 
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, Meta, Stylesheet, Title};
+use leptos_meta::{Meta, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     components::{Route, Router, Routes},
     path,
@@ -18,14 +27,36 @@ use crate::auth_store::{AuthStore, LoginCredentials};
 /// Shell component that wraps the entire application.
 ///
 /// Provides meta context and routing for SSR support.
+///
+/// # Hydration
+///
+/// When built with the `hydrate` feature:
+/// - On the server: Creates store and renders hydration script
+/// - On the client: Restores store state from serialized data
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context for <Title> and <Meta> components
     provide_meta_context();
 
     // Create and provide the auth store
+    // With hydration: uses `provide_hydrated_store` which:
+    //   1. On server: Creates store and embeds serialized state
+    //   2. On client: Reads embedded state and restores the store
+    // Without hydration: just provides the store to context
     let store = AuthStore::new();
-    provide_store(store);
+
+    #[cfg(feature = "hydrate")]
+    {
+        // Hydration-aware store provision
+        // This will attempt to restore state from server-rendered HTML
+        provide_hydrated_store(store);
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        // Standard store provision (CSR or non-hydration SSR)
+        provide_store(store);
+    }
 
     view! {
         <Stylesheet id="leptos" href="/pkg/auth-store-example.css"/>
@@ -251,10 +282,7 @@ fn UserAvatar() -> impl IntoView {
 
 /// Info card component for displaying user information.
 #[component]
-fn InfoCard(
-    title: &'static str,
-    value: Signal<String>,
-) -> impl IntoView {
+fn InfoCard(title: &'static str, value: Signal<String>) -> impl IntoView {
     view! {
         <div class="info-card">
             <h3>{title}</h3>

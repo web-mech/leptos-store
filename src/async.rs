@@ -86,9 +86,10 @@ impl ActionError {
 pub type ActionResult<T, E = ActionError> = Result<T, E>;
 
 /// State of an async action.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ActionState {
     /// Action has not been executed yet.
+    #[default]
     Idle,
     /// Action is currently running.
     Pending,
@@ -96,12 +97,6 @@ pub enum ActionState {
     Success,
     /// Action failed with an error.
     Error,
-}
-
-impl Default for ActionState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 impl ActionState {
@@ -216,13 +211,15 @@ pub trait AsyncAction<S: Store>: Send + Sync {
     type Error: Send + std::error::Error;
 
     /// Execute the action asynchronously.
-    fn execute(&self, store: &S) -> impl Future<Output = ActionResult<Self::Output, Self::Error>> + Send;
+    fn execute(
+        &self,
+        store: &S,
+    ) -> impl Future<Output = ActionResult<Self::Output, Self::Error>> + Send;
 }
 
 /// A boxed async action for type erasure.
-pub type BoxedAsyncAction<S, O, E> = Box<
-    dyn Fn(&S) -> BoxFuture<'static, ActionResult<O, E>> + Send + Sync,
->;
+pub type BoxedAsyncAction<S, O, E> =
+    Box<dyn Fn(&S) -> BoxFuture<'static, ActionResult<O, E>> + Send + Sync>;
 
 /// Builder for constructing async actions with fluent API.
 ///
