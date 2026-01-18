@@ -37,7 +37,8 @@ This document provides comprehensive instructions for working with the leptos-st
 
 | Tool | Purpose | Installation |
 |------|---------|--------------|
-| trunk | WASM bundler for examples | `cargo install trunk` |
+| cargo-leptos | SSR build tool for examples | `cargo install cargo-leptos` |
+| trunk | WASM bundler for CSR examples | `cargo install trunk` |
 | cargo-watch | Auto-rebuild on changes | `cargo install cargo-watch` |
 | cargo-tarpaulin | Code coverage | `cargo install cargo-tarpaulin` |
 | cargo-audit | Security audits | `cargo install cargo-audit` |
@@ -70,13 +71,15 @@ make test
 ### Quick Commands Reference
 
 ```bash
-make help          # Show all available commands
-make check         # Verify compilation
-make test          # Run all tests
-make clippy        # Run lints
-make fmt           # Format code
-make example       # Run the auth example
-make doc-open      # View documentation
+make help                              # Show all available commands
+make check                             # Verify compilation
+make test                              # Run all tests
+make clippy                            # Run lints
+make fmt                               # Format code
+make examples-list                     # List all examples
+make run NAME=token-explorer-example   # Run SSR example
+make example                           # Run auth example (legacy)
+make doc-open                          # View documentation
 ```
 
 ---
@@ -96,16 +99,31 @@ leptos-store/
 │   ├── store.rs               # Core Store trait, builders
 │   ├── context.rs             # Leptos context integration
 │   ├── async.rs               # Async action support
+│   ├── hydration.rs           # SSR hydration support (feature: hydrate)
 │   └── macros.rs              # Declarative macros
 │
 ├── examples/
-│   └── auth-store-example/    # Complete auth example
+│   ├── auth-store-example/    # Basic auth example
+│   │   ├── Cargo.toml
+│   │   ├── index.html
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── auth_store.rs
+│   │       └── components.rs
+│   │
+│   └── token-explorer-example/ # Full SSR hydration example
 │       ├── Cargo.toml
-│       ├── index.html         # UI with styles
+│       ├── style/main.css
 │       └── src/
-│           ├── lib.rs
-│           ├── auth_store.rs  # Store implementation
-│           └── components.rs  # Leptos components
+│           ├── main.rs         # SSR server entry point
+│           ├── lib.rs          # Hydration entry point
+│           ├── token_store.rs  # HydratableStore implementation
+│           └── components.rs   # Leptos components
+│
+├── scripts/                   # Build and release scripts
+│   ├── bump-version.sh
+│   ├── release.sh
+│   └── publish.sh
 │
 └── docs/
     └── specs/
@@ -117,9 +135,10 @@ leptos-store/
 | Module | Responsibility |
 |--------|---------------|
 | `store.rs` | Core `Store` trait, `Getter`, `Mutator`, `StoreBuilder`, `StoreRegistry` |
-| `context.rs` | `provide_store`, `use_store`, `StoreProvider`, scoped stores |
+| `context.rs` | `provide_store`, `use_store`, `StoreProvider`, scoped stores, hydration context functions |
 | `async.rs` | `Action`, `AsyncAction`, `ReactiveAction`, `ActionState` |
-| `macros.rs` | `store!`, `define_state!`, `define_action!`, `define_async_action!`, `impl_store!` |
+| `hydration.rs` | `HydratableStore` trait, serialization/deserialization, `HydrationBuilder` (feature: `hydrate`) |
+| `macros.rs` | `store!`, `define_state!`, `define_hydratable_state!`, `define_action!`, `define_async_action!`, `impl_store!`, `impl_hydratable_store!` |
 | `prelude.rs` | Public API re-exports |
 
 ---
@@ -164,8 +183,10 @@ The crate supports these feature flags:
 | Flag | Description | Default |
 |------|-------------|---------|
 | `ssr` | Server-side rendering support | ✅ |
-| `hydrate` | Hydration support | ❌ |
+| `hydrate` | SSR hydration with state serialization | ❌ |
 | `csr` | Client-side rendering only | ❌ |
+
+**Note**: For full SSR applications, use `ssr` on the server and `hydrate` on the client. These features enable conditional compilation and the `HydratableStore` trait.
 
 Test all feature combinations:
 
@@ -299,6 +320,118 @@ fn Counter() -> impl IntoView {
 | Async Actions | ❌ | ✅ | ✅ |
 
 **Key principle: Only mutators may write state.**
+
+---
+
+## Creating Hydratable Stores (SSR)
+
+For SSR applications, stores need to transfer state from server to client. Implement the `HydratableStore` trait:
+
+### Manual Implementation
+
+```rust
+use leptos::prelude::*;
+use leptos_store::prelude::*;
+use serde::{Serialize, Deserialize};
+
+// 1. State must be serializable
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TokenState {
+    pub tokens: Vec<Token>,
+    pub error: Option<String>,
+}
+
+// 2. Define store as usual
+#[derive(Clone)]
+pub struct TokenStore {
+    state: RwSignal<TokenState>,
+}
+
+impl Store for TokenStore {
+    type State = TokenState;
+    fn state(&self) -> ReadSignal<Self::State> {
+        self.state.read_only()
+    }
+}
+
+// 3. Implement HydratableStore (feature: hydrate)
+#[cfg(feature = "hydrate")]
+impl HydratableStore for TokenStore {
+    fn serialize_state(&self) -> Result<String, StoreHydrationError> {
+        serde_json::to_string(&self.state.get())
+            .map_err(|e| StoreHydrationError::Serialization(e.to_string()))
+    }
+
+    fn from_hydrated_state(data: &str) -> Result<Self, StoreHydrationError> {
+        let state: TokenState = serde_json::from_str(data)
+            .map_err(|e| StoreHydrationError::Deserialization(e.to_string()))?;
+        Ok(Self { state: RwSignal::new(state) })
+    }
+
+    fn store_key() -> &'static str {
+        "token_store"  // Unique key for this store
+    }
+}
+```
+
+### Using Macros
+
+```rust
+use leptos_store::{define_hydratable_state, impl_hydratable_store};
+
+// Define state with serde derives
+define_hydratable_state! {
+    pub struct TokenState {
+        tokens: Vec<Token>,
+        error: Option<String>,
+    }
+}
+
+// Implement HydratableStore
+impl_hydratable_store!(TokenStore, TokenState, state, "token_store");
+```
+
+### SSR Integration
+
+**Server-side (`main.rs` with `ssr` feature):**
+
+```rust
+// Create and populate store
+let store = TokenStore::new_with_data(tokens);
+
+// Provide to context and get hydration script
+let hydration_script = provide_hydrated_store(store);
+
+view! {
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <HydrationScripts/>
+        </head>
+        <body>
+            {hydration_script}  // Renders <script> with JSON state
+            <App/>
+        </body>
+    </html>
+}
+```
+
+**Client-side (`lib.rs` with `hydrate` feature):**
+
+```rust
+#[wasm_bindgen]
+pub fn hydrate() {
+    leptos::mount::hydrate_body(App);
+}
+
+#[component]
+fn App() -> impl IntoView {
+    // Automatically reads state from DOM and creates store
+    let store = use_hydrated_store::<TokenStore>();
+    
+    view! { /* ... */ }
+}
+```
 
 ---
 
@@ -446,35 +579,60 @@ pub fn my_function(param: Type) -> ReturnType {
 
 ---
 
-## Running the Example
+## Running Examples
 
-### Development Mode
+### Listing Available Examples
 
 ```bash
-# Start with hot-reload (default port 8080)
+make examples-list
+```
+
+This shows all examples with their descriptions and ports.
+
+### Running an Example
+
+```bash
+# Run any example by name (SSR mode with cargo-leptos)
+make run NAME=auth-store-example
+make run NAME=token-explorer-example
+
+# Legacy command for auth-store-example
 make example
-
-# Custom port
-make example-port PORT=3000
 ```
 
-Then open http://localhost:8080 in your browser.
-
-### Production Build
+### Building Examples
 
 ```bash
-# Debug build
-make example-build
+# Build specific example
+make build-example NAME=token-explorer-example
 
-# Optimized release build
-make example-release
+# Build in release mode
+make build-example-release NAME=token-explorer-example
+
+# Check example compiles (both SSR and hydrate)
+make check-example NAME=token-explorer-example
+
+# Test all examples
+make test-all-examples
+
+# Check all examples compile
+make check-all-examples
 ```
 
-Output will be in `examples/auth-store-example/dist/`.
+### Example Ports
 
-### Example Features
+| Example | Port | URL |
+|---------|------|-----|
+| auth-store-example | 3000 | http://127.0.0.1:3000 |
+| token-explorer-example | 3005 | http://127.0.0.1:3005 |
 
-The auth-store-example demonstrates:
+---
+
+## Example: auth-store-example
+
+Basic authentication flow demonstrating core leptos-store patterns.
+
+### Features
 
 - ✅ Store definition with state, getters, mutators
 - ✅ Context-based store sharing
@@ -482,6 +640,65 @@ The auth-store-example demonstrates:
 - ✅ Reactive UI updates
 - ✅ Error handling
 - ✅ Loading states
+
+### Running
+
+```bash
+make run NAME=auth-store-example
+# or legacy: make example
+```
+
+---
+
+## Example: token-explorer-example
+
+**Full SSR with hydration** - Real-time Solana token explorer using Jupiter API.
+
+### Features
+
+- ✅ Full SSR with `cargo-leptos`
+- ✅ `HydratableStore` implementation for state transfer
+- ✅ Server-side data fetching from Jupiter API
+- ✅ Automatic state hydration on client
+- ✅ Client-side polling (30s refresh)
+- ✅ Reactive filtering and sorting
+- ✅ URL-synced query parameters
+- ✅ Beautiful token card UI
+
+### Architecture
+
+```
+Server (SSR)                    Client (Hydration)
+┌─────────────────┐            ┌─────────────────┐
+│ Fetch tokens    │            │ Read hydration  │
+│ from Jupiter    │──render──▶ │ data from DOM   │
+│                 │            │                 │
+│ Serialize state │            │ Deserialize     │
+│ to <script> tag │            │ into TokenStore │
+└─────────────────┘            └─────────────────┘
+                                      │
+                                      ▼
+                               ┌─────────────────┐
+                               │ Start polling   │
+                               │ for updates     │
+                               └─────────────────┘
+```
+
+### Running
+
+```bash
+make run NAME=token-explorer-example
+# Opens at http://127.0.0.1:3005
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/main.rs` | SSR server with Actix-web, renders hydration script |
+| `src/lib.rs` | WASM hydration entry point |
+| `src/token_store.rs` | `TokenStore` with `HydratableStore` implementation |
+| `src/components.rs` | UI components with reactive filtering |
 
 ---
 
@@ -660,6 +877,46 @@ rustup target add wasm32-unknown-unknown
 
 **Fix**: Remove unnecessary `.clone()` calls on signals.
 
+#### Hydration mismatch errors
+
+**Cause**: Server and client rendered different HTML.
+
+**Fix**: Ensure the store state is identical on both sides:
+
+```rust
+// Server: Serialize and embed state
+let hydration_script = provide_hydrated_store(store);
+
+// Client: Read from DOM, not create new
+let store = use_hydrated_store::<MyStore>();  // NOT MyStore::new()
+```
+
+#### "Hydration data not found" error
+
+**Cause**: The hydration `<script>` tag is missing from the HTML.
+
+**Fix**: Ensure the server renders the hydration script:
+
+```rust
+view! {
+    {provide_hydrated_store(store)}  // Must be in the view
+    <App/>
+}
+```
+
+#### State not serializing correctly
+
+**Cause**: State type doesn't derive `Serialize` and `Deserialize`.
+
+**Fix**: Add serde derives to your state:
+
+```rust
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MyState {
+    // fields...
+}
+```
+
 ### Getting Help
 
 1. Check the [README](./README.md) for basic usage
@@ -679,7 +936,14 @@ make clippy          # Run lints
 make fmt             # Format code
 make ci              # Full CI pipeline
 
-# Example
+# Examples (generic)
+make examples-list                        # List all examples
+make run NAME=token-explorer-example      # Run specific example
+make build-example NAME=auth-store-example # Build specific example
+make check-all-examples                   # Check all examples compile
+make test-all-examples                    # Test all examples
+
+# Examples (legacy auth-store-example)
 make example         # Run auth example
 make example-release # Build optimized
 
@@ -689,6 +953,11 @@ make doc-open        # View docs in browser
 # Publishing
 make publish-dry     # Test publish
 make publish         # Publish to crates.io
+
+# Version Management
+make version         # Show current version
+make bump            # Auto-bump based on commits
+make release         # Full release process
 
 # Utilities
 make clean           # Clean artifacts
