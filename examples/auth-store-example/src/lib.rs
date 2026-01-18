@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Mike Price
+
 //! Auth Store Example
 //!
 //! This example demonstrates how to build a complete authentication
