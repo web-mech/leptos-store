@@ -7,13 +7,13 @@
 //!
 //! | Macro | Purpose | Feature |
 //! |-------|---------|---------|
-//! | [`define_state!`] | Define state structs with default values | - |
-//! | [`define_hydratable_state!`] | Define state with serde derives for hydration | `hydrate` |
-//! | [`define_action!`] | Define synchronous action structs | - |
-//! | [`define_async_action!`] | Define async action structs with error types | - |
-//! | [`impl_store!`] | Implement Store trait for a type | - |
-//! | [`impl_hydratable_store!`] | Implement HydratableStore trait | `hydrate` |
-//! | [`store!`] | Complete store definition in one macro | - |
+//! | `define_state!` | Define state structs with default values | - |
+//! | `define_hydratable_state!` | Define state with serde derives for hydration | `hydrate` |
+//! | `define_action!` | Define synchronous action structs | - |
+//! | `define_async_action!` | Define async action structs with error types | - |
+//! | `impl_store!` | Implement Store trait for a type | - |
+//! | `impl_hydratable_store!` | Implement HydratableStore trait | `hydrate` |
+//! | `store!` | Complete store definition in one macro | - |
 //!
 //! # Quick Start
 //!
