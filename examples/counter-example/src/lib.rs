@@ -11,11 +11,11 @@
 //! - Reactive UI updates
 //! - SSR (Server-Side Rendering) support
 
-pub mod counter_store;
 pub mod components;
+pub mod counter_store;
 
-pub use counter_store::*;
 pub use components::*;
+pub use counter_store::*;
 
 /// Hydration entry point - called on the client to hydrate the SSR HTML
 #[cfg(feature = "hydrate")]
