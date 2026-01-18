@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 Mike Price
+// Copyright 2026 web-mech
 
 //! Token Store - State management for Solana token data
 //!
