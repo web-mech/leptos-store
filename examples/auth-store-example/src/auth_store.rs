@@ -213,6 +213,13 @@ impl AuthStore {
         }
     }
 
+    /// Get the state without tracking reactivity.
+    ///
+    /// Used for serialization during SSR hydration.
+    pub fn get_state_untracked(&self) -> AuthState {
+        self.state.get_untracked()
+    }
+
     // ========================================================================
     // Getters
     // ========================================================================
