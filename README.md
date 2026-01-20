@@ -81,7 +81,12 @@ leptos-store = { version = "0.1", default-features = false, features = ["csr"] }
 
 ## Quick Start
 
-### Define Your Store
+### Define Your Store (Enterprise Mode)
+
+The library enforces the **Enterprise Mode** pattern:
+- **Getters**: Public, read-only derived values
+- **Mutators**: Private, internal state modification only
+- **Actions**: Public, the only external API for writes
 
 ```rust
 use leptos::prelude::*;
@@ -96,7 +101,7 @@ pub struct CounterState {
 // Define your store
 #[derive(Clone)]
 pub struct CounterStore {
-    state: RwSignal<CounterState>,
+    state: RwSignal<CounterState>,  // Private field
 }
 
 impl CounterStore {
@@ -106,22 +111,31 @@ impl CounterStore {
         }
     }
 
-    // Getters - derived, read-only values
+    // Getters - PUBLIC, derived read-only values
     pub fn doubled(&self) -> i32 {
         self.state.with(|s| s.count * 2)
     }
 
-    // Mutators - pure, synchronous state changes
+    // Mutators - PRIVATE, internal state changes
+    fn set_count(&self, value: i32) {
+        self.state.update(|s| s.count = value);
+    }
+
+    fn add_to_count(&self, delta: i32) {
+        self.state.update(|s| s.count += delta);
+    }
+
+    // Actions - PUBLIC, the external API for writes
     pub fn increment(&self) {
-        self.state.update(|s| s.count += 1);
+        self.add_to_count(1);
     }
 
     pub fn decrement(&self) {
-        self.state.update(|s| s.count -= 1);
+        self.add_to_count(-1);
     }
 
-    pub fn set_count(&self, value: i32) {
-        self.state.update(|s| s.count = value);
+    pub fn reset(&self) {
+        self.set_count(0);
     }
 }
 
@@ -182,22 +196,33 @@ store! {
             }
         }
 
+        // PRIVATE - internal state changes only
         mutators {
-            increment(this) {
-                this.mutate(|s| s.count += 1);
-            }
-            decrement(this) {
-                this.mutate(|s| s.count -= 1);
-            }
             set_count(this, value: i32) {
                 this.mutate(|s| s.count = value);
+            }
+            add_to_count(this, delta: i32) {
+                this.mutate(|s| s.count += delta);
+            }
+        }
+
+        // PUBLIC - external API for writes
+        actions {
+            increment(this) {
+                this.add_to_count(1);
+            }
+            decrement(this) {
+                this.add_to_count(-1);
+            }
+            reset(this) {
+                this.set_count(0);
             }
         }
     }
 }
 ```
 
-> **Note**: Use `this` (or any identifier) instead of `self` in getter/mutator bodies due to Rust 2024 macro hygiene rules. The macro provides `this.read()` for getters and `this.mutate()` for mutators.
+> **Note**: Use `this` (or any identifier) instead of `self` in getter/mutator/action bodies due to Rust 2024 macro hygiene rules. The macro provides `this.read()` for getters and `this.mutate()` for mutators. Mutators are **private** - external code must use public **actions**.
 
 ## Available Macros
 

@@ -784,14 +784,42 @@ macro_rules! impl_store {
 // store! macro
 // ============================================================================
 
-/// Define a complete store with state, getters, and mutators in one macro.
+/// Define a complete store with state, getters, mutators, and actions.
 ///
-/// This is the most comprehensive macro that generates:
+/// This is the most comprehensive macro that generates a store following
+/// the **Enterprise Mode** pattern:
+///
 /// - A state struct with public fields and Default implementation
 /// - A store struct with constructor methods
-/// - Store trait implementation
-/// - Getter methods for derived state
-/// - Mutator methods for state changes
+/// - Store trait implementation (read/write split)
+/// - **Public** getter methods for derived state
+/// - **Private** mutator methods for internal state changes
+/// - **Public** action methods as the only external write API
+///
+/// # Architecture
+///
+/// ```text
+/// ┌─────────────────────────────────────────────────────────┐
+/// │                    External Code                        │
+/// │  (Components, Event Handlers, Other Modules)            │
+/// └─────────────────────┬───────────────────────────────────┘
+///                       │
+///            ┌──────────▼──────────┐
+///            │   PUBLIC Actions    │  ← Only write API
+///            │   increment()       │
+///            │   login()           │
+///            └──────────┬──────────┘
+///                       │
+///            ┌──────────▼──────────┐
+///            │  PRIVATE Mutators   │  ← Internal only
+///            │   set_count()       │
+///            │   set_loading()     │
+///            └──────────┬──────────┘
+///                       │
+///            ┌──────────▼──────────┐
+///            │   RwSignal<State>   │  ← Private field
+///            └─────────────────────┘
+/// ```
 ///
 /// # Syntax
 ///
@@ -804,14 +832,23 @@ macro_rules! impl_store {
 ///         }
 ///
 ///         getters {
-///             getter_name() -> ReturnType {
-///                 // body using self.state()
+///             // PUBLIC - read-only derived values
+///             getter_name(this) -> ReturnType {
+///                 this.read(|s| s.field)
 ///             }
 ///         }
 ///
 ///         mutators {
-///             mutator_name(param: Type) {
-///                 // body using self.state.update(...)
+///             // PRIVATE - internal state changes
+///             set_field(this, value: Type) {
+///                 this.mutate(|s| s.field = value);
+///             }
+///         }
+///
+///         actions {
+///             // PUBLIC - external write API
+///             do_something(this, param: Type) {
+///                 this.set_field(param);  // calls private mutator
 ///             }
 ///         }
 ///     }
@@ -822,97 +859,67 @@ macro_rules! impl_store {
 ///
 /// - `StoreName::new()` - Create with default state
 /// - `StoreName::with_state(state)` - Create with custom state
-/// - All getter methods
-/// - All mutator methods
+/// - All getter methods (public)
+/// - All mutator methods (private)
+/// - All action methods (public)
 ///
 /// # Example - Full Store Definition
-///
-/// Note: Due to Rust macro hygiene, the full example with `self` references
-/// works in module scope but not in doc tests. Here's the structure:
 ///
 /// ```rust
 /// use leptos_store::store;
 ///
-/// // Define a store without getters/mutators (works in doc test)
 /// store! {
 ///     pub TodoStore {
 ///         state TodoState {
 ///             items: Vec<String>,
 ///             filter: String = "all".to_string(),
 ///         }
-///     }
-/// }
-///
-/// // Verify the generated types
-/// let state = TodoState::default();
-/// assert_eq!(state.filter, "all");
-/// assert!(state.items.is_empty());
-///
-/// let store = TodoStore::new();
-/// ```
-///
-/// ## Full Example (for use in modules)
-///
-/// ```rust,ignore
-/// use leptos_store::store;
-///
-/// store! {
-///     pub CounterStore {
-///         state CounterState {
-///             count: i32 = 0,
-///             step: i32 = 1,
-///         }
 ///
 ///         getters {
-///             // Computed value
-///             doubled() -> i32 {
-///                 self.state().with(|s| s.count * 2)
-///             }
-///
-///             // Formatted display
-///             display() -> String {
-///                 self.state().with(|s| format!("Count: {}", s.count))
+///             item_count(this) -> usize {
+///                 this.read(|s| s.items.len())
 ///             }
 ///         }
 ///
 ///         mutators {
-///             // Simple mutation
-///             increment() {
-///                 self.state.update(|s| s.count += s.step);
+///             push_item(this, item: String) {
+///                 this.mutate(|s| s.items.push(item));
 ///             }
-///
-///             decrement() {
-///                 self.state.update(|s| s.count -= s.step);
+///             set_filter(this, filter: String) {
+///                 this.mutate(|s| s.filter = filter);
 ///             }
+///         }
 ///
-///             // Mutation with parameter
-///             set_count(value: i32) {
-///                 self.state.update(|s| s.count = value);
+///         actions {
+///             add_todo(this, text: String) {
+///                 if !text.is_empty() {
+///                     this.push_item(text);
+///                 }
 ///             }
-///
-///             set_step(step: i32) {
-///                 self.state.update(|s| s.step = step);
-///             }
-///
-///             // Reset to defaults
-///             reset() {
-///                 self.state.update(|s| {
-///                     s.count = 0;
-///                     s.step = 1;
-///                 });
+///             show_all(this) {
+///                 this.set_filter("all".to_string());
 ///             }
 ///         }
 ///     }
 /// }
-/// ```
-/// Define a complete store with state, getters, and mutators in one macro.
 ///
-/// This macro generates a complete store implementation including:
-/// - A state struct with public fields and Default implementation
-/// - A store struct with constructor methods
-/// - Store trait implementation (with read/write split)
-/// - Getter methods for derived state
-/// - Mutator methods for state changes
+/// let store = TodoStore::new();
+/// store.add_todo("Buy milk".to_string());  // OK - action is public
+/// // store.push_item("...".to_string());   // ERROR - mutator is private
+/// assert_eq!(store.item_count(), 1);
+/// ```
+/// Define a complete store with state, getters, mutators, and actions.
+///
+/// This macro generates a complete store implementation following the
+/// **Enterprise Mode** pattern:
+///
+/// - **State fields**: Public for reading, but only mutable through mutators
+/// - **Getters**: Public, read-only derived values
+/// - **Mutators**: **Private** - internal methods for state changes
+/// - **Actions**: **Public** - the only external API for writes
+///
+/// This enforces a clean separation where external code cannot bypass
+/// business logic by calling mutators directly.
 ///
 /// # Syntax
 ///
@@ -931,11 +938,17 @@ macro_rules! impl_store {
 ///         }
 ///
 ///         mutators {
-///             mutator_name(this) {
+///             // PRIVATE - only callable from actions within this store
+///             set_field(this, value: Type) {
 ///                 this.mutate(|s| s.field = value);
 ///             }
-///             mutator_with_params(this, param: Type) {
-///                 this.mutate(|s| s.field = param);
+///         }
+///
+///         actions {
+///             // PUBLIC - the external API for state changes
+///             do_something(this, param: Type) {
+///                 // Can call private mutators
+///                 this.set_field(param);
 ///             }
 ///         }
 ///     }
@@ -945,8 +958,8 @@ macro_rules! impl_store {
 /// # Note on `this` parameter
 ///
 /// Due to Rust 2024 edition macro hygiene rules, you must use `this` (or any
-/// identifier you choose) instead of `self` in getter and mutator bodies.
-/// The first parameter in each getter/mutator is bound to `&self`.
+/// identifier you choose) instead of `self` in getter, mutator, and action bodies.
+/// The first parameter in each is bound to `&self`.
 ///
 /// The macro provides two helper methods:
 /// - `this.read(|s| ...)` - Read state immutably (for getters)
@@ -961,23 +974,69 @@ macro_rules! impl_store {
 ///     pub CounterStore {
 ///         state CounterState {
 ///             count: i32 = 0,
+///             loading: bool = false,
 ///         }
 ///
 ///         getters {
 ///             doubled(this) -> i32 {
 ///                 this.read(|s| s.count * 2)
 ///             }
+///             is_loading(this) -> bool {
+///                 this.read(|s| s.loading)
+///             }
 ///         }
 ///
 ///         mutators {
-///             increment(this) {
-///                 this.mutate(|s| s.count += 1);
-///             }
+///             // Private - can only be called from actions
 ///             set_count(this, value: i32) {
 ///                 this.mutate(|s| s.count = value);
 ///             }
+///             set_loading(this, loading: bool) {
+///                 this.mutate(|s| s.loading = loading);
+///             }
+///         }
+///
+///         actions {
+///             // Public API - external code calls these
+///             increment(this) {
+///                 let current = this.read(|s| s.count);
+///                 this.set_count(current + 1);
+///             }
+///             decrement(this) {
+///                 let current = this.read(|s| s.count);
+///                 this.set_count(current - 1);
+///             }
+///             reset(this) {
+///                 this.set_count(0);
+///                 this.set_loading(false);
+///             }
 ///         }
 ///     }
+/// }
+///
+/// // External code can only use actions
+/// let store = CounterStore::new();
+/// store.increment();  // OK - action is public
+/// // store.set_count(5);  // ERROR - mutator is private
+/// ```
+///
+/// # Migration from Previous Versions
+///
+/// If you previously had public mutators, move them to the `actions` section
+/// or create actions that delegate to them:
+///
+/// ```rust,ignore
+/// // Before (mutators were public)
+/// mutators {
+///     increment(this) { this.mutate(|s| s.count += 1); }
+/// }
+///
+/// // After (mutators private, actions public)
+/// mutators {
+///     add_to_count(this, n: i32) { this.mutate(|s| s.count += n); }
+/// }
+/// actions {
+///     increment(this) { this.add_to_count(1); }
 /// }
 /// ```
 #[macro_export]
@@ -993,6 +1052,7 @@ macro_rules! store {
             $(
                 getters {
                     $(
+                        $(#[$getter_meta:meta])*
                         $getter_name:ident ( $getter_self:ident ) -> $getter_ty:ty $getter_body:block
                     )*
                 }
@@ -1001,7 +1061,17 @@ macro_rules! store {
             $(
                 mutators {
                     $(
+                        $(#[$mutator_meta:meta])*
                         $mutator_name:ident ( $mutator_self:ident $(, $mutator_param:ident : $mutator_param_ty:ty)* ) $mutator_body:block
+                    )*
+                }
+            )?
+
+            $(
+                actions {
+                    $(
+                        $(#[$action_meta:meta])*
+                        $action_name:ident ( $action_self:ident $(, $action_param:ident : $action_param_ty:ty)* ) $(-> $action_ret:ty)? $action_body:block
                     )*
                 }
             )?
@@ -1047,10 +1117,12 @@ macro_rules! store {
                 }
             }
 
-            // Generate getters - use captured self identifier
-            // Note: Users should use this.get_state() for reading
+            // ================================================================
+            // Getters - PUBLIC read-only derived values
+            // ================================================================
             $(
                 $(
+                    $(#[$getter_meta])*
                     #[allow(dead_code)]
                     pub fn $getter_name(&self) -> $getter_ty {
                         let $getter_self = self;
@@ -1059,14 +1131,32 @@ macro_rules! store {
                 )*
             )?
 
-            // Generate mutators - use captured self identifier
-            // Note: Users should use this.mutate() for writing
+            // ================================================================
+            // Mutators - PRIVATE internal state modification
+            // Only callable from within this store (actions, other mutators)
+            // ================================================================
             $(
                 $(
+                    $(#[$mutator_meta])*
                     #[allow(dead_code)]
-                    pub fn $mutator_name(&self $(, $mutator_param: $mutator_param_ty)*) {
+                    fn $mutator_name(&self $(, $mutator_param: $mutator_param_ty)*) {
                         let $mutator_self = self;
                         $mutator_body
+                    }
+                )*
+            )?
+
+            // ================================================================
+            // Actions - PUBLIC write API
+            // The only way external code can modify state
+            // ================================================================
+            $(
+                $(
+                    $(#[$action_meta])*
+                    #[allow(dead_code)]
+                    pub fn $action_name(&self $(, $action_param: $action_param_ty)*) $(-> $action_ret)? {
+                        let $action_self = self;
+                        $action_body
                     }
                 )*
             )?
@@ -1133,25 +1223,42 @@ macro_rules! define_getter {
     };
 }
 
-/// Macro to define a mutator function inside an impl block.
+/// Macro to define a **private** mutator function inside an impl block.
 ///
 /// This is a helper macro for manual store definitions when not using
-/// the `store!` macro.
+/// the `store!` macro. Mutators are generated as **private** functions
+/// to enforce the Enterprise Mode pattern where only actions are public.
 ///
 /// # Note
 ///
 /// This macro must be used inside an impl block for a type that has
 /// a `state` field of type `RwSignal<State>`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// impl MyStore {
+///     // Private mutator - only callable from within this impl
+///     define_mutator!(set_count, value: i32, |state, v| state.count = v);
+///     
+///     // Public action - calls the private mutator
+///     pub fn increment(&self) {
+///         self.set_count(self.state.with(|s| s.count + 1));
+///     }
+/// }
+/// ```
 #[macro_export]
 macro_rules! define_mutator {
     ($name:ident, $closure:expr) => {
-        pub fn $name(&self) {
+        #[allow(dead_code)]
+        fn $name(&self) {
             self.state.update($closure);
         }
     };
 
     ($name:ident, $param:ident : $param_ty:ty, $closure:expr) => {
-        pub fn $name(&self, $param: $param_ty) {
+        #[allow(dead_code)]
+        fn $name(&self, $param: $param_ty) {
             self.state.update(|state| {
                 let mutator: fn(&mut Self::State, $param_ty) = $closure;
                 mutator(state, $param);
